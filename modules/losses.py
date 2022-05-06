@@ -1,5 +1,3 @@
-import numpy.random as random
-from mindspore import Tensor
 import mindspore.ops as ops
 
 __all__ = ['kl_criterion', 'kl_bern_criterion']

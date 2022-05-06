@@ -1,11 +1,16 @@
 import argparse
-import torch
+import mindspore
+from mindspore import Tensor
+from mindspore.common.initializer import One
+import mindspore.ops as ops
 import numpy as np
 import moviepy.editor as mpy
 import imageio
 from glob import glob
 import os
 from torchvision.utils import make_grid
+
+transpose = ops.Transpose()
 
 
 def make_video(tensor, fps, filename):
@@ -28,24 +33,27 @@ def generate_gifs(opt):
         os.makedirs(os.path.join(exp_dir, opt.save_path), exist_ok=True)
         print('Generating dir {}'.format(os.path.join(exp_dir, opt.save_path)))
 
-        real_sample = torch.load(reals_path)
+        real_sample = mindspore.load(reals_path)
         make_video(real_sample, 4, os.path.join(exp_dir, opt.save_path, 'real.gif'))
 
-        random_samples = torch.load(fakes_path).permute(0, 2, 3, 4, 1)[:opt.max_samples]
+        random_samples = transpose(mindspore.load_checkpoint(fakes_path), (0, 2, 3, 4, 1))[:opt.max_samples]
 
         # Make grid
-        real_transpose = torch.tensor(real_sample).permute(0, 3, 1, 2)[::2]  # TxCxHxW
-        grid_image = make_grid(real_transpose, real_transpose.shape[0]).permute(1, 2, 0)
-        imageio.imwrite(os.path.join(exp_dir, opt.save_path, 'real_unfold.png'), grid_image.data.numpy())
+        real_transpose = transpose(Tensor(real_sample), (0, 3, 1, 2))[::2]  # TxCxHxW
+        grid_image = transpose(make_grid(real_transpose, real_transpose.shape[0]), (1, 2, 0))
+        imageio.imwrite(os.path.join(exp_dir, opt.save_path, 'real_unfold.png'), 
+                        grid_image.data.numpy())
 
         fake = (random_samples.data.cpu().numpy() * 255).astype(np.uint8)
-        fake_transpose = torch.tensor(fake).permute(0, 1, 4, 2, 3)[:, ::2]  # BxTxCxHxW
+        fake_transpose = Tensor(fake).permute(0, 1, 4, 2, 3)[:, ::2]  # BxTxCxHxW
         fake_reshaped = fake_transpose.flatten(0, 1)  # (B+T)xCxHxW
-        grid_image = make_grid(fake_reshaped[:10 * fake_transpose.shape[1], :, :, :], fake_transpose.shape[1]).permute(
-            1, 2, 0)
-        imageio.imwrite(os.path.join(exp_dir, opt.save_path, 'fake_unfold.png'), grid_image.data.numpy())
+        grid_image = transpose(make_grid(fake_reshaped[:10 * fake_transpose.shape[1], :, :, :], 
+                                         fake_transpose.shape[1]
+                                        ), (1, 2, 0))
+        imageio.imwrite(os.path.join(exp_dir, opt.save_path, 'fake_unfold.png'), 
+                        grid_image.data.numpy())
 
-        white_space = torch.ones_like(random_samples)[:, :, :, :10] * 255
+        white_space = Tensor(shape=random_samples.shape, init=One())[:, :, :, :10] * 255
 
         random_samples = random_samples.data.cpu().numpy()
         random_samples = (random_samples * 255).astype(np.uint8)

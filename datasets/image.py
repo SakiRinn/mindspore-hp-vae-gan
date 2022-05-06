@@ -1,14 +1,18 @@
 import random
+import mindspore
 from mindspore.dataset import Dataset
 from mindspore import Tensor
+import mindspore.ops as ops
 import imageio
-import kornia as K
 import utils
 import cv2
 import logging
 import os
-import kornia.geometry.transform as T
-from kornia.enhance import normalize
+from mindspore.dataset.vision.c_transforms import Normalize
+
+transpose = ops.Transpose()
+hflip = ops.ReverseV2(-1)
+normalize = Normalize(mean=0.5, std=0.5)
 
 
 class SingleImageDataset(Dataset):
@@ -42,14 +46,18 @@ class SingleImageDataset(Dataset):
         hflip = random.random() < 0.5 if self.opt.hflip else False
 
         images = self.generate_image(self.opt.scale_idx)
-        images = K.image_to_tensor(images).float()
+        images = Tensor(transpose(images, (2, 0, 1)), mindspore.float32) \
+                if images.ndim == 3 else \
+                    Tensor(transpose(images, (0, 3, 1, 2)), mindspore.float32)
         images = images / 255  # Set range [0, 1]
         images_transformed = self._get_transformed_images(images, hflip)
 
         # Extract o-level index
         if self.opt.scale_idx > 0:
             images_zero_scale = self.generate_image(0)
-            images_zero_scale = K.image_to_tensor(images_zero_scale).float()
+            images_zero_scale = Tensor(transpose(images_zero_scale, (2, 0, 1)), mindspore.float32) \
+                if images_zero_scale.ndim == 3 else \
+                    Tensor(transpose(images_zero_scale, (0, 3, 1, 2)), mindspore.float32)
             images_zero_scale = images_zero_scale / 255
             images_zero_scale_transformed = self._get_transformed_images(images_zero_scale, hflip)
 
@@ -63,15 +71,16 @@ class SingleImageDataset(Dataset):
         images_transformed = images
 
         if hflip:
-            images_transformed = T.hflip(images_transformed)
+            images_transformed = hflip(images_transformed)
 
         # Normalize
-        images_transformed = normalize(images_transformed, Tensor([0.5]), Tensor([0.5]))
+        images_transformed = normalize(images_transformed)
 
         return images_transformed
 
     def generate_image(self, scale_idx):
-        base_size = utils.get_scales_by_index(scale_idx, self.opt.scale_factor, self.opt.stop_scale, self.opt.img_size)
+        base_size = utils.get_scales_by_index(scale_idx, self.opt.scale_factor, 
+                                              self.opt.stop_scale, self.opt.img_size)
         scaled_size = [int(base_size * self.opt.ar), base_size]
         self.opt.scaled_size = scaled_size
         img = cv2.resize(self.image_full_scale, tuple(scaled_size[::-1]))

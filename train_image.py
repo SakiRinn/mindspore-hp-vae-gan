@@ -8,9 +8,9 @@ import logging
 import colorama
 
 import torch
-import torch.nn.functional as F
-from torch.utils.data import DataLoader
-import torch.optim as optim
+import mindspore
+import mindspore.nn as nn
+import mindspore.ops as ops
 
 from modules import networks_2d
 from modules.losses import kl_criterion
@@ -22,20 +22,24 @@ blue = colorama.Fore.CYAN + colorama.Style.BRIGHT
 green = colorama.Fore.GREEN + colorama.Style.BRIGHT
 magenta = colorama.Fore.MAGENTA + colorama.Style.BRIGHT
 
+RMSELoss = nn.RMSELoss()
+
 
 def train(opt, netG):
     if opt.vae_levels < opt.scale_idx + 1:
-        D_curr = getattr(networks_2d, opt.discriminator)(opt).to(opt.device)
+        D_curr = getattr(networks_2d, opt.discriminator)(opt)
 
         if (opt.netG != '') and (opt.resumed_idx == opt.scale_idx):
-            D_curr.load_state_dict(
-                torch.load('{}/netD_{}.pth'.format(opt.resume_dir, opt.scale_idx - 1))['state_dict'])
+            D_curr.load_param_into_net(
+                mindspore.load_checkpoint('{}/netD_{}.ckpt'\
+                                          .format(opt.resume_dir, opt.scale_idx - 1))['state_dict'])
         elif opt.vae_levels < opt.scale_idx:
-            D_curr.load_state_dict(
-                torch.load('{}/netD_{}.pth'.format(opt.saver.experiment_dir, opt.scale_idx - 1))['state_dict'])
+            D_curr.load_param_into_net(     # FIXME: 区别？
+                mindspore.load_checkpoint('{}/netD_{}.ckpt'\
+                                          .format(opt.saver.experiment_dir, opt.scale_idx - 1))['state_dict'])
 
         # Current optimizers
-        optimizerD = optim.Adam(D_curr.parameters(), lr=opt.lr_d, betas=(opt.beta1, 0.999))
+        optimizerD = nn.Adam(D_curr.parameters(), opt.lr_d, beta1=opt.beta1, beta2=0.999)
 
     parameter_list = []
     # Generator Adversary
@@ -69,7 +73,7 @@ def train(opt, netG):
                  "lr": opt.lr_g * (opt.lr_scale ** (len(netG.body[-opt.train_depth:]) - 1 - idx))}
                 for idx, block in enumerate(netG.body[-opt.train_depth:])]
 
-    optimizerG = optim.Adam(parameter_list, lr=opt.lr_g, betas=(opt.beta1, 0.999))
+    optimizerG = nn.Adam(parameter_list, opt.lr_g, beta1=opt.beta1, beta2=0.999)
 
     # Parallel
     if opt.device == 'cuda':
@@ -101,17 +105,14 @@ def train(opt, netG):
 
         if opt.scale_idx > 0:
             real, real_zero = data
-            real = real.to(opt.device)
-            real_zero = real_zero.to(opt.device)
         else:
-            real = data.to(opt.device)
             real_zero = real
 
         initial_size = utils.get_scales_by_index(0, opt.scale_factor, opt.stop_scale, opt.img_size)
         initial_size = [int(initial_size * opt.ar), initial_size]
         opt.Z_init_size = [opt.batch_size, opt.latent_dim, *initial_size]
 
-        noise_init = utils.generate_noise(size=opt.Z_init_size, device=opt.device)
+        noise_init = utils.generate_noise(size=opt.Z_init_size)
 
         ############################
         # calculate noise_amp
@@ -120,17 +121,18 @@ def train(opt, netG):
             if opt.const_amp:
                 opt.Noise_Amps.append(1)
             else:
-                with torch.no_grad():
-                    if opt.scale_idx == 0:
-                        opt.noise_amp = 1
-                        opt.Noise_Amps.append(opt.noise_amp)
-                    else:
-                        opt.Noise_Amps.append(0)
-                        z_reconstruction, _, _ = G_curr(real_zero, opt.Noise_Amps, mode="rec")
-
-                        RMSE = torch.sqrt(F.mse_loss(real, z_reconstruction))
-                        opt.noise_amp = opt.noise_amp_init * RMSE.item() / opt.batch_size
-                        opt.Noise_Amps[-1] = opt.noise_amp
+                if opt.scale_idx == 0:
+                    opt.noise_amp = 1
+                    opt.Noise_Amps.append(opt.noise_amp)
+                else:
+                    opt.Noise_Amps.append(0)
+                    z_reconstruction, _, _ = G_curr(real_zero, opt.Noise_Amps, mode="rec")
+                    
+                    RMSE = RMSELoss(real, z_reconstruction)
+                    # no_grad
+                    RMSE = ops.stop_gradient(RMSE)
+                    opt.noise_amp = opt.noise_amp_init * RMSE.item() / opt.batch_size
+                    opt.Noise_Amps[-1] = opt.noise_amp
 
         ############################
         # (1) Update VAE network
@@ -165,7 +167,7 @@ def train(opt, netG):
             output = D_curr(fake.detach())
             errD_fake = output.mean()
 
-            gradient_penalty = calc_gradient_penalty(D_curr, real, fake, opt.lambda_grad, opt.device)
+            gradient_penalty = calc_gradient_penalty(D_curr, real, fake, opt.lambda_grad)
             errD_total = errD_real + errD_fake + gradient_penalty
             errD_total.backward()
             optimizerD.step()
@@ -231,19 +233,19 @@ def train(opt, netG):
     epoch_iterator.close()
 
     # Save data
-    opt.saver.save_checkpoint({'data': opt.Noise_Amps}, 'Noise_Amps.pth')
+    opt.saver.save_checkpoint({'data': opt.Noise_Amps}, 'Noise_Amps.ckpt')
     opt.saver.save_checkpoint({
         'scale': opt.scale_idx,
         'state_dict': netG.state_dict(),
         'optimizer': optimizerG.state_dict(),
         'noise_amps': opt.Noise_Amps,
-    }, 'netG.pth')
+    }, 'netG.ckpt')
     if opt.vae_levels < opt.scale_idx + 1:
         opt.saver.save_checkpoint({
             'scale': opt.scale_idx,
             'state_dict': D_curr.module.state_dict() if opt.device == 'cuda' else D_curr.state_dict(),
             'optimizer': optimizerD.state_dict(),
-        }, 'netD_{}.pth'.format(opt.scale_idx))
+        }, 'netD_{}.ckpt'.format(opt.scale_idx))
 
 
 if __name__ == '__main__':
@@ -347,13 +349,16 @@ if __name__ == '__main__':
     opt.nfc_prev = 0
     opt.Noise_Amps = []
 
-    # Date
+    # Data
     dataset = SingleImageDataset(opt)
-    data_loader = DataLoader(dataset,
-                             shuffle=True,
-                             drop_last=True,
-                             batch_size=opt.batch_size,
-                             num_workers=4)
+    # data_loader = DataLoader(dataset,
+    #                          shuffle=True,
+    #                          drop_last=True,
+    #                          batch_size=opt.batch_size,
+    #                          num_workers=4)
+    dataset = dataset.batch(opt.batch_size)
+    dataset = dataset.shuffle(4)
+    data_loader = dataset.create_dict_iterator()
 
     if opt.stop_scale_time == -1:
         opt.stop_scale_time = opt.stop_scale
@@ -388,15 +393,15 @@ if __name__ == '__main__':
     if opt.netG != '':
         if not os.path.isfile(opt.netG):
             raise RuntimeError("=> no <G> checkpoint found at '{}'".format(opt.netG))
-        checkpoint = torch.load(opt.netG)
+        checkpoint = mindspore.load_checkpoint(opt.netG)
         opt.scale_idx = checkpoint['scale']
         opt.resumed_idx = checkpoint['scale']
         opt.resume_dir = '/'.join(opt.netG.split('/')[:-1])
         for _ in range(opt.scale_idx):
             netG.init_next_stage()
-        netG.load_state_dict(checkpoint['state_dict'])
+        netG.load_param_into_net(checkpoint['state_dict'])
         # NoiseAmp
-        opt.Noise_Amps = torch.load(os.path.join(opt.resume_dir, 'Noise_Amps.pth'))['data']
+        opt.Noise_Amps = mindspore.load_checkpoint(os.path.join(opt.resume_dir, 'Noise_Amps.ckpt'))['data']
     else:
         opt.resumed_idx = -1
 

@@ -1,11 +1,14 @@
 import os
 from torchvision.utils import make_grid
 from torch.utils.tensorboard import SummaryWriter
+import mindspore.ops as ops
+
+transpose = ops.Transpose()
 
 
 def norm_ip(img, min, max):
-    img.clamp_(min=min, max=max)
-    img.add_(-min).div_(max - min + 1e-5)
+    img = img.clamp(min, max)
+    img = (img - min) / (max - min + 1e-5)
 
 
 def norm_range(t, range=None):
@@ -25,8 +28,10 @@ class TensorboardSummary(object):
 
     def visualize_video(self, opt, global_step, video, name):
 
-        video_transpose = video.permute(0, 2, 1, 3, 4)  # BxTxCxHxW
-        video_reshaped = video_transpose.flatten(0, 1)  # (B+T)xCxHxW
+        video_transpose = transpose(video, (0, 2, 1, 3, 4))  # BxTxCxHxW
+        video_reshaped = video_transpose.reshape(video_transpose.shape[0] + video_transpose.shape[1], 
+                                                 *video_transpose.shape[2:])
+        # (B+T)xCxHxW
 
         # image_range = opt.td #+ opt.num_targets
         image_range = video.shape[2]

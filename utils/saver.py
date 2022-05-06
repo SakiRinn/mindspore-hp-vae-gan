@@ -47,7 +47,7 @@ class VideoSaver(object):
 
     def load_checkpoint(self, filename):
         filename = os.path.join(self.experiment_dir, filename)
-        return mindspore.load(filename)
+        return mindspore.load_checkpoint(filename)
 
     def save_video(self, array, filename):
         filename = os.path.join(self.eval_dir, filename)
@@ -81,4 +81,4 @@ class ImageSaver(object):
 
     def load_checkpoint(self, filename):
         filename = os.path.join(self.experiment_dir, filename)
-        return mindspore.load(filename)
+        return mindspore.load_checkpoint(filename)

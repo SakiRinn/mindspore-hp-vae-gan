@@ -1,12 +1,19 @@
 import os
 import random
+import mindspore
+from mindspore import Tensor
 from mindspore.dataset import Dataset
+import mindspore.ops as ops
+from mindspore.dataset.vision.c_transforms import Normalize
 import numpy as np
 import cv2
-import kornia as K
 from . import video_to_frames
 import utils
 import logging
+
+transpose = ops.Transpose()
+hflip = ops.ReverseV2(-1)
+normalize = Normalize(mean=0.5, std=0.5)
 
 
 class SingleVideoDataset(Dataset):
@@ -49,7 +56,9 @@ class SingleVideoDataset(Dataset):
 
         every = self.opt.sampling_rates[self.opt.fps_index]
         frames = self.frames[idx:idx + self.opt.fps_lcm + 1:every]
-        frames = K.image_to_tensor(frames).float()
+        frames = Tensor(transpose(frames, (2, 0, 1)), mindspore.float32) \
+                if frames.ndim == 3 else \
+                    Tensor(transpose(frames, (0, 3, 1, 2)), mindspore.float32)
         frames = frames / 255  # Set range [0, 1]
         frames_transformed = self._get_transformed_frames(frames, hflip)
 
@@ -57,7 +66,9 @@ class SingleVideoDataset(Dataset):
         if self.opt.scale_idx > 0:
             every_zero_scale = self.opt.sampling_rates[0]
             frames_zero_scale = self.zero_scale_frames[idx:idx + self.opt.fps_lcm + 1:every_zero_scale]
-            frames_zero_scale = K.image_to_tensor(frames_zero_scale).float()
+            frames_zero_scale = Tensor(transpose(frames_zero_scale, (2, 0, 1)), mindspore.float32) \
+                if frames_zero_scale.ndim == 3 else \
+                    Tensor(transpose(frames_zero_scale, (0, 3, 1, 2)), mindspore.float32)
             frames_zero_scale = frames_zero_scale / 255
             frames_zero_scale_transformed = self._get_transformed_frames(frames_zero_scale, hflip)
 
@@ -71,18 +82,19 @@ class SingleVideoDataset(Dataset):
         frames_transformed = frames
 
         if hflip:
-            frames_transformed = K.hflip(frames_transformed)
+            frames_transformed = hflip(frames_transformed)
 
         # Normalize
-        frames_transformed = K.normalize(frames_transformed, 0.5, 0.5)
+        frames_transformed = normalize(frames_transformed)
 
         # Permute CTHW
-        frames_transformed = frames_transformed.permute(1, 0, 2, 3)
+        frames_transformed = transpose(frames_transformed, (1, 0, 2, 3))
 
         return frames_transformed
 
     def _generate_frames(self, scale_idx):
-        base_size = utils.get_scales_by_index(scale_idx, self.opt.scale_factor, self.opt.stop_scale, self.opt.img_size)
+        base_size = utils.get_scales_by_index(scale_idx, self.opt.scale_factor, 
+                                              self.opt.stop_scale, self.opt.img_size)
         scaled_size = [int(base_size * self.opt.ar), base_size]
         self.opt.scaled_size = scaled_size
 

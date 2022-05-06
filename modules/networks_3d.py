@@ -125,11 +125,12 @@ class Encode3DVAE_nb(nn.Cell):
         self.features = FeatureExtractor(opt.nc_im, opt.nfc, opt.ker_size, opt.ker_size // 2, 1, num_blocks=num_blocks)
         self.mu = nn.SequentialCell(
             ConvBlock3D(opt.nfc, output_dim, opt.ker_size, opt.ker_size // 2, 1, bn=False, act=None),
-            ops.AdaptiveAvgPool3D(1)    # FIXME: 缺失3D自适应平均池化层 Reduce_mean
+            ops.ReduceMean(keep_dims=True)  # AdaptiveAvgPool3D(1)
         )
         self.logvar = nn.SequentialCell(
             ConvBlock3D(opt.nfc, output_dim, opt.ker_size, opt.ker_size // 2, 1, bn=False, act=None),
-            ops.AdaptiveAvgPool3D(1)    # FIXME: 缺失3D自适应平均池化层
+            ops.AdaptiveAvgPool2D(1),
+            ops.ReduceMean(keep_dims=True)  # AdaptiveAvgPool3D(1)
         )
         self.bern = ConvBlock3D(opt.nfc, 1, opt.ker_size, opt.ker_size // 2, 1, bn=False, act=None)
 
