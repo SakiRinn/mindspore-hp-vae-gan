@@ -1,7 +1,5 @@
 import os
 import random
-import mindspore
-from mindspore import Tensor
 from mindspore.dataset import Dataset
 import mindspore.ops as ops
 from mindspore.dataset.vision.c_transforms import Normalize
@@ -12,8 +10,8 @@ import utils
 import logging
 
 transpose = ops.Transpose()
-hflip = ops.ReverseV2(-1)
-normalize = Normalize(mean=0.5, std=0.5)
+hflip_func = ops.ReverseV2(axis=[-1])
+normalize = Normalize(mean=[0.5], std=[0.5])
 
 
 class SingleVideoDataset(Dataset):
@@ -56,9 +54,9 @@ class SingleVideoDataset(Dataset):
 
         every = self.opt.sampling_rates[self.opt.fps_index]
         frames = self.frames[idx:idx + self.opt.fps_lcm + 1:every]
-        frames = Tensor(transpose(frames, (2, 0, 1)), mindspore.float32) \
-                if frames.ndim == 3 else \
-                    Tensor(transpose(frames, (0, 3, 1, 2)), mindspore.float32)
+        frames = np.array(frames).transpose(2, 0, 1).astype(np.float32) \
+                    if frames.ndim == 3 else \
+                    np.array(frames).transpose(0, 3, 1, 2).astype(np.float32)
         frames = frames / 255  # Set range [0, 1]
         frames_transformed = self._get_transformed_frames(frames, hflip)
 
@@ -66,9 +64,9 @@ class SingleVideoDataset(Dataset):
         if self.opt.scale_idx > 0:
             every_zero_scale = self.opt.sampling_rates[0]
             frames_zero_scale = self.zero_scale_frames[idx:idx + self.opt.fps_lcm + 1:every_zero_scale]
-            frames_zero_scale = Tensor(transpose(frames_zero_scale, (2, 0, 1)), mindspore.float32) \
-                if frames_zero_scale.ndim == 3 else \
-                    Tensor(transpose(frames_zero_scale, (0, 3, 1, 2)), mindspore.float32)
+            frames_zero_scale = np.array(frames_zero_scale).transpose(2, 0, 1).astype(np.float32) \
+                                    if frames_zero_scale.ndim == 3 else \
+                                    np.array(frames_zero_scale).transpose(0, 3, 1, 2).astype(np.float32)
             frames_zero_scale = frames_zero_scale / 255
             frames_zero_scale_transformed = self._get_transformed_frames(frames_zero_scale, hflip)
 
@@ -78,17 +76,13 @@ class SingleVideoDataset(Dataset):
 
     @staticmethod
     def _get_transformed_frames(frames, hflip):
-
         frames_transformed = frames
-
         if hflip:
-            frames_transformed = hflip(frames_transformed)
-
+            frames_transformed = hflip_func(frames_transformed)
         # Normalize
         frames_transformed = normalize(frames_transformed)
-
         # Permute CTHW
-        frames_transformed = transpose(frames_transformed, (1, 0, 2, 3))
+        frames_transformed = frames_transformed.transpose(1, 0, 2, 3)
 
         return frames_transformed
 

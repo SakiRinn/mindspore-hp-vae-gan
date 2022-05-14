@@ -1,21 +1,22 @@
 import random
-import mindspore
-from mindspore.dataset import Dataset
-from mindspore import Tensor
+import numpy as np
 import mindspore.ops as ops
 import imageio
-import utils
 import cv2
 import logging
 import os
 from mindspore.dataset.vision.c_transforms import Normalize
+import mindspore.dataset as ds
+import sys
+sys.path.append("../")
+import utils
 
 transpose = ops.Transpose()
-hflip = ops.ReverseV2(-1)
-normalize = Normalize(mean=0.5, std=0.5)
+hflip_func = ops.ReverseV2(axis=[-1])
+normalize = Normalize(mean=[0.5], std=[0.5])    # FIXME: 3通道
 
 
-class SingleImageDataset(Dataset):
+class SingleImageDataset(ds.Dataset):
     def __init__(self, opt, transforms=None):
         super(SingleImageDataset, self).__init__()
 
@@ -41,23 +42,22 @@ class SingleImageDataset(Dataset):
         return self.opt.data_rep
 
     def __getitem__(self, idx):
-
         # Horizontal flip (Until Kornia will handle videos
         hflip = random.random() < 0.5 if self.opt.hflip else False
 
         images = self.generate_image(self.opt.scale_idx)
-        images = Tensor(transpose(images, (2, 0, 1)), mindspore.float32) \
-                if images.ndim == 3 else \
-                    Tensor(transpose(images, (0, 3, 1, 2)), mindspore.float32)
+        images = np.array(images).transpose(2, 0, 1).astype(np.float32) \
+                    if images.ndim == 3 else \
+                    np.array(images).transpose(0, 3, 1, 2).astype(np.float32)
         images = images / 255  # Set range [0, 1]
         images_transformed = self._get_transformed_images(images, hflip)
 
         # Extract o-level index
         if self.opt.scale_idx > 0:
             images_zero_scale = self.generate_image(0)
-            images_zero_scale = Tensor(transpose(images_zero_scale, (2, 0, 1)), mindspore.float32) \
-                if images_zero_scale.ndim == 3 else \
-                    Tensor(transpose(images_zero_scale, (0, 3, 1, 2)), mindspore.float32)
+            images_zero_scale = np.array(images_zero_scale).transpose(2, 0, 1).astype(np.float32) \
+                                    if images_zero_scale.ndim == 3 else \
+                                    np.array(images_zero_scale).transpose(0, 3, 1, 2).astype(np.float32)
             images_zero_scale = images_zero_scale / 255
             images_zero_scale_transformed = self._get_transformed_images(images_zero_scale, hflip)
 
@@ -67,15 +67,11 @@ class SingleImageDataset(Dataset):
 
     @staticmethod
     def _get_transformed_images(images, hflip):
-
         images_transformed = images
-
         if hflip:
-            images_transformed = hflip(images_transformed)
-
+            images_transformed = hflip_func(images_transformed)
         # Normalize
         images_transformed = normalize(images_transformed)
-
         return images_transformed
 
     def generate_image(self, scale_idx):
@@ -85,3 +81,30 @@ class SingleImageDataset(Dataset):
         self.opt.scaled_size = scaled_size
         img = cv2.resize(self.image_full_scale, tuple(scaled_size[::-1]))
         return img
+
+
+if __name__ == '__main__':
+    class Opt:
+        def __init__(self):
+            # Model
+            self.nfc = 64
+            self.nc_im = 3
+            self.ker_size = 3
+            self.num_layer = 5
+            self.latent_dim = 128
+            self.enc_blocks = 2
+            self.padd_size = 1
+            # Dataset
+            self.image_path = '../data/imgs/air_balloons.jpg'
+            self.hflip = False
+            self.img_size = 256
+            self.data_rep = 1000
+            # Train
+            self.scale_idx = 0
+    
+    opt = Opt()
+    # 实例化数据集类
+    dataset_generator = SingleImageDataset(opt)
+    dataset = ds.GeneratorDataset(dataset_generator, shuffle=False)
+    # 打印数据条数
+    print("data size:", dataset.get_dataset_size())

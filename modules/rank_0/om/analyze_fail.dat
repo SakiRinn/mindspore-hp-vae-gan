@@ -1,0 +1,170 @@
+# [No.1] construct_wrapper.1
+# In file /home/mindspore/anaconda3/envs/wlh/lib/python3.9/site-packages/mindspore/nn/layer/container.py(247)/    def construct(self, input_data):/
+funcgraph fg_1(
+        %para1 : Tensor(F32)[1, 3, 64, 64, 64]    # input_data
+        , %para2 : Ref[Tensor(F32)][3, 3, 3, 3, 3]    # 1.weight
+    ) {
+
+#------------------------> 0
+    %1 = FuncGraph::fg_8(%para1)    #(Tensor(F32)[1, 3, 64, 64, 64])    # fg_8=construct.8 #scope: Default
+#[CNode]14
+    Primitive::Return{prim_type=1}(%1)    #(Undefined) #scope: Default
+      # In file /home/mindspore/anaconda3/envs/wlh/lib/python3.9/site-packages/mindspore/nn/layer/container.py(248)/        for cell in self.cell_list:/#[CNode]15
+}
+# order:
+#   1: construct_wrapper.1:[CNode]14{[0]: ValueNode<FuncGraph> construct.8, [1]: input_data}
+#   2: construct_wrapper.1:[CNode]15{[0]: ValueNode<Primitive> Return, [1]: [CNode]14}
+
+
+# [No.2] construct.8
+# In file /home/mindspore/anaconda3/envs/wlh/lib/python3.9/site-packages/mindspore/nn/layer/container.py(247)/    def construct(self, input_data):/
+funcgraph fg_8[fg_1](
+        %para3 : Tensor(F32)[1, 3, 64, 64, 64]    # input_data
+    ) {
+    %1 : Tuple[Func*3] = Primitive::MakeTuple{prim_type=1}(FuncGraph::fg_12, FuncGraph::fg_16, FuncGraph::fg_17)    #(Func, Func, Func)    # fg_12=construct.12, fg_16=construct.16, fg_17=construct.17 #scope: Default
+      # In file /home/mindspore/anaconda3/envs/wlh/lib/python3.9/site-packages/mindspore/nn/layer/container.py(248)/        for cell in self.cell_list:/#[CNode]18
+    %2 : I64 = FuncGraph::fg_19(%1)    #(Tuple[Func*3])    # fg_19=ms_len.19 #scope: Default
+      # In file /home/mindspore/anaconda3/envs/wlh/lib/python3.9/site-packages/mindspore/nn/layer/container.py(248)/        for cell in self.cell_list:/#[CNode]20
+    %3 : Bool = Primitive::scalar_lt{prim_type=1}(%2, I64(9223372036854775807))    #(I64, I64) #scope: Default
+      # In file /home/mindspore/anaconda3/envs/wlh/lib/python3.9/site-packages/mindspore/nn/layer/container.py(248)/        for cell in self.cell_list:/#[CNode]21
+    %4 : Func = Primitive::Switch{prim_type=1}(%3, FuncGraph::fg_9, FuncGraph::fg_22)    #(Bool, Func, Func)    # fg_9=✓construct.9, fg_22=✗construct.22 #scope: Default
+      # In file /home/mindspore/anaconda3/envs/wlh/lib/python3.9/site-packages/mindspore/nn/layer/container.py(248)/        for cell in self.cell_list:/#[CNode]23
+
+#------------------------> 1
+    %5 = %4() #scope: Default
+      # In file /home/mindspore/anaconda3/envs/wlh/lib/python3.9/site-packages/mindspore/nn/layer/container.py(248)/        for cell in self.cell_list:/#[CNode]24
+    Primitive::Return{prim_type=1}(%5)    #(Undefined) #scope: Default
+      # In file /home/mindspore/anaconda3/envs/wlh/lib/python3.9/site-packages/mindspore/nn/layer/container.py(248)/        for cell in self.cell_list:/#[CNode]25
+}
+# order:
+#   1: construct.8:[CNode]20{[0]: ValueNode<FuncGraph> ms_len.19, [1]: [CNode]18}
+#   2: construct.8:[CNode]21{[0]: ValueNode<Primitive> scalar_lt, [1]: [CNode]20, [2]: ValueNode<Int64Imm> 9223372036854775807}
+#   3: construct.8:[CNode]23{[0]: ValueNode<Primitive> Switch, [1]: [CNode]21, [2]: ValueNode<FuncGraph> ✓construct.9, [3]: ValueNode<FuncGraph> ✗construct.22}
+#   4: construct.8:[CNode]24{[0]: [CNode]23}
+#   5: construct.8:[CNode]25{[0]: ValueNode<Primitive> Return, [1]: [CNode]24}
+
+
+# [No.3] ✓construct.9
+# In file /home/mindspore/anaconda3/envs/wlh/lib/python3.9/site-packages/mindspore/nn/layer/container.py(248)/        for cell in self.cell_list:/
+funcgraph fg_9[fg_8](
+) {
+    %1 : $(construct.8):Tuple[Func*3] = Primitive::MakeTuple{prim_type=1}(FuncGraph::fg_12, FuncGraph::fg_16, FuncGraph::fg_17)    #(Func, Func, Func)    # fg_12=construct.12, fg_16=construct.16, fg_17=construct.17 #scope: Default
+      # In file /home/mindspore/anaconda3/envs/wlh/lib/python3.9/site-packages/mindspore/nn/layer/container.py(248)/        for cell in self.cell_list:/#[CNode]18
+    %2 : Tuple[Func*3] = FuncGraph::fg_26(%1)    #(Tuple[Func*3])    # fg_26=ms_iter.26 #scope: Default
+      # In file /home/mindspore/anaconda3/envs/wlh/lib/python3.9/site-packages/mindspore/nn/layer/container.py(248)/        for cell in self.cell_list:/#@cell
+
+#------------------------> 2
+    %3 = FuncGraph::fg_10(%2, %para3)    #(Tuple[Func*3], Tensor(F32)[1, 3, 64, 64, 64])    # fg_10=⤾✓construct.10 #scope: Default
+      # In file /home/mindspore/anaconda3/envs/wlh/lib/python3.9/site-packages/mindspore/nn/layer/container.py(248)/        for cell in self.cell_list:/#[CNode]27
+    Primitive::Return{prim_type=1}(%3)    #(Undefined) #scope: Default
+      # In file /home/mindspore/anaconda3/envs/wlh/lib/python3.9/site-packages/mindspore/nn/layer/container.py(248)/        for cell in self.cell_list:/#[CNode]28
+}
+# order:
+#   1: ✓construct.9:@cell{[0]: ValueNode<FuncGraph> ms_iter.26, [1]: [CNode]18}
+#   2: ✓construct.9:[CNode]27{[0]: ValueNode<FuncGraph> ⤾✓construct.10, [1]: @cell, [2]: input_data}
+#   3: ✓construct.9:[CNode]28{[0]: ValueNode<Primitive> Return, [1]: [CNode]27}
+
+
+# [No.4] ⤾✓construct.10
+# In file /home/mindspore/anaconda3/envs/wlh/lib/python3.9/site-packages/mindspore/nn/layer/container.py(248)/        for cell in self.cell_list:/
+funcgraph fg_10(
+        %para4 : Tuple[Func*3]    # @cell
+        , %para5 : Tensor(F32)[1, 3, 64, 64, 64]    # Φinput_data
+    ) {
+    %1 : Bool = FuncGraph::fg_29(%para4)    #(Tuple[Func*3])    # fg_29=hasnext.29 #scope: Default
+      # In file /home/mindspore/anaconda3/envs/wlh/lib/python3.9/site-packages/mindspore/nn/layer/container.py(248)/        for cell in self.cell_list:/#[CNode]30
+    %2 : Func = Primitive::Switch{prim_type=1}(%1, FuncGraph::fg_11, FuncGraph::fg_31)    #(Bool, Func, Func)    # fg_11=⥁✓construct.11, fg_31=↓✓construct.31 #scope: Default
+      # In file /home/mindspore/anaconda3/envs/wlh/lib/python3.9/site-packages/mindspore/nn/layer/container.py(248)/        for cell in self.cell_list:/#[CNode]32
+
+#------------------------> 3
+    %3 = %2() #scope: Default
+      # In file /home/mindspore/anaconda3/envs/wlh/lib/python3.9/site-packages/mindspore/nn/layer/container.py(248)/        for cell in self.cell_list:/#[CNode]33
+    Primitive::Return{prim_type=1}(%3)    #(Undefined) #scope: Default
+      # In file /home/mindspore/anaconda3/envs/wlh/lib/python3.9/site-packages/mindspore/nn/layer/container.py(248)/        for cell in self.cell_list:/#[CNode]34
+}
+# order:
+#   1: ⤾✓construct.10:[CNode]30{[0]: ValueNode<FuncGraph> hasnext.29, [1]: @cell}
+#   2: ⤾✓construct.10:[CNode]32{[0]: ValueNode<Primitive> Switch, [1]: [CNode]30, [2]: ValueNode<FuncGraph> ⥁✓construct.11, [3]: ValueNode<FuncGraph> ↓✓construct.31}
+#   3: ⤾✓construct.10:[CNode]33{[0]: [CNode]32}
+#   4: ⤾✓construct.10:[CNode]34{[0]: ValueNode<Primitive> Return, [1]: [CNode]33}
+
+
+# [No.5] ⥁✓construct.11
+# In file /home/mindspore/anaconda3/envs/wlh/lib/python3.9/site-packages/mindspore/nn/layer/container.py(248)/        for cell in self.cell_list:/
+funcgraph fg_11[fg_10](
+) {
+    %1 : Tuple[Func,Tuple[Func*2]] = FuncGraph::fg_35(%para4)    #(Tuple[Func*3])    # fg_35=ms_next.35 #scope: Default
+      # In file /home/mindspore/anaconda3/envs/wlh/lib/python3.9/site-packages/mindspore/nn/layer/container.py(248)/        for cell in self.cell_list:/#[CNode]36
+    %2 : Tuple[Func*2] = DoSignaturePrimitive::S-Prim-getitem{prim_type=1}(%1, I64(1))    #(Tuple[Func,Tuple[Func*2]], I64) #scope: Default
+      # In file /home/mindspore/anaconda3/envs/wlh/lib/python3.9/site-packages/mindspore/nn/layer/container.py(248)/        for cell in self.cell_list:/#@cell
+    %3 : Func = DoSignaturePrimitive::S-Prim-getitem{prim_type=1}(%1, I64(0))    #(Tuple[Func,Tuple[Func*2]], I64) #scope: Default
+      # In file /home/mindspore/anaconda3/envs/wlh/lib/python3.9/site-packages/mindspore/nn/layer/container.py(248)/        for cell in self.cell_list:/#cell
+
+#------------------------> 4
+    %4 = %3(%para5)    #(Tensor(F32)[1, 3, 64, 64, 64]) #scope: Default
+      # In file /home/mindspore/anaconda3/envs/wlh/lib/python3.9/site-packages/mindspore/nn/layer/container.py(249)/            input_data = cell(input_data)/#input_data
+    %5 = FuncGraph::fg_10(%2, %4)    #(Tuple[Func*2], Undefined)    # fg_10=⤾✓construct.10 #scope: Default
+      # In file /home/mindspore/anaconda3/envs/wlh/lib/python3.9/site-packages/mindspore/nn/layer/container.py(248)/        for cell in self.cell_list:/#[CNode]37
+    Primitive::Return{prim_type=1}(%5)    #(Undefined) #scope: Default
+      # In file /home/mindspore/anaconda3/envs/wlh/lib/python3.9/site-packages/mindspore/nn/layer/container.py(248)/        for cell in self.cell_list:/#[CNode]38
+}
+# order:
+#   1: ⥁✓construct.11:[CNode]36{[0]: ValueNode<FuncGraph> ms_next.35, [1]: @cell}
+#   2: ⥁✓construct.11:cell{[0]: ValueNode<DoSignaturePrimitive> S-Prim-getitem, [1]: [CNode]36, [2]: ValueNode<Int64Imm> 0}
+#   3: ⥁✓construct.11:@cell{[0]: ValueNode<DoSignaturePrimitive> S-Prim-getitem, [1]: [CNode]36, [2]: ValueNode<Int64Imm> 1}
+#   4: ⥁✓construct.11:input_data{[0]: cell, [1]: Φinput_data}
+#   5: ⥁✓construct.11:[CNode]37{[0]: ValueNode<FuncGraph> ⤾✓construct.10, [1]: @cell, [2]: input_data}
+#   6: ⥁✓construct.11:[CNode]38{[0]: ValueNode<Primitive> Return, [1]: [CNode]37}
+
+
+# [No.6] construct.12
+# In file /home/mindspore/anaconda3/envs/wlh/lib/python3.9/site-packages/mindspore/nn/layer/basic.py(820)/    def construct(self, x):/
+funcgraph fg_12(
+        %para6 : Tensor(F32)[1, 3, 64, 64, 64]    # x
+    ) {
+    %1 : Bool = DoSignaturePrimitive::S-Prim-equal{prim_type=1}("REFLECT", "CONSTANT")    #(String, String) #scope: Default/0-Pad
+      # In file /home/mindspore/anaconda3/envs/wlh/lib/python3.9/site-packages/mindspore/nn/layer/basic.py(821)/        if self.mode == "CONSTANT":/#[CNode]39
+    %2 : Bool = FuncGraph::fg_40(%1)    #(Bool)    # fg_40=bool_.40 #scope: Default/0-Pad
+      # In file /home/mindspore/anaconda3/envs/wlh/lib/python3.9/site-packages/mindspore/nn/layer/basic.py(821)/        if self.mode == "CONSTANT":/#[CNode]41
+    %3 : Func = Primitive::Switch{prim_type=1}(%2, FuncGraph::fg_42, FuncGraph::fg_13)    #(Bool, Func, Func)    # fg_42=✓construct.42, fg_13=✗construct.13 #scope: Default/0-Pad
+      # In file /home/mindspore/anaconda3/envs/wlh/lib/python3.9/site-packages/mindspore/nn/layer/basic.py(821)/        if self.mode == "CONSTANT":/#[CNode]43
+
+#------------------------> 5
+    %4 = %3() #scope: Default/0-Pad
+      # In file /home/mindspore/anaconda3/envs/wlh/lib/python3.9/site-packages/mindspore/nn/layer/basic.py(821)/        if self.mode == "CONSTANT":/#[CNode]44
+    Primitive::Return{prim_type=1}(%4)    #(Undefined) #scope: Default/0-Pad
+      # In file /home/mindspore/anaconda3/envs/wlh/lib/python3.9/site-packages/mindspore/nn/layer/basic.py(821)/        if self.mode == "CONSTANT":/#[CNode]45
+}
+# order:
+#   1: construct.12:[CNode]39{[0]: ValueNode<DoSignaturePrimitive> S-Prim-equal, [1]: ValueNode<StringImm> REFLECT, [2]: ValueNode<StringImm> CONSTANT}
+#   2: construct.12:[CNode]41{[0]: ValueNode<FuncGraph> bool_.40, [1]: [CNode]39}
+#   3: construct.12:[CNode]43{[0]: ValueNode<Primitive> Switch, [1]: [CNode]41, [2]: ValueNode<FuncGraph> ✓construct.42, [3]: ValueNode<FuncGraph> ✗construct.13}
+#   4: construct.12:[CNode]44{[0]: [CNode]43}
+#   5: construct.12:[CNode]45{[0]: ValueNode<Primitive> Return, [1]: [CNode]44}
+
+
+# [No.7] ✗construct.13
+# In file /home/mindspore/anaconda3/envs/wlh/lib/python3.9/site-packages/mindspore/nn/layer/basic.py(821)/        if self.mode == "CONSTANT":/
+funcgraph fg_13[fg_12](
+) {
+
+#------------------------> 6
+    %1 = DoSignaturePrimitive::S-Prim-MirrorPad{prim_type=1}[mode="REFLECT"](%para6, Tensor(35)[2, 2, 2])    #(Tensor(F32)[1, 3, 64, 64, 64], Tensor(I64)[2, 2, 2]) #scope: Default/0-Pad
+      # In file /home/mindspore/anaconda3/envs/wlh/lib/python3.9/site-packages/mindspore/nn/layer/basic.py(824)/            x = self.pad(x, self.paddings)/#x
+    %2 = FuncGraph::fg_46(%1)    #(Undefined)    # fg_46=↓construct.46 #scope: Default/0-Pad
+      # In file /home/mindspore/anaconda3/envs/wlh/lib/python3.9/site-packages/mindspore/nn/layer/basic.py(821)/        if self.mode == "CONSTANT":/#[CNode]47
+    Primitive::Return{prim_type=1}(%2)    #(Undefined) #scope: Default/0-Pad
+      # In file /home/mindspore/anaconda3/envs/wlh/lib/python3.9/site-packages/mindspore/nn/layer/basic.py(821)/        if self.mode == "CONSTANT":/#[CNode]48
+}
+# order:
+#   1: ✗construct.13:x{[0]: ValueNode<DoSignaturePrimitive> S-Prim-MirrorPad, [1]: x, [2]: ValueNode<Tensor> Tensor(shape=[2, 2, 2], dtype=Int64, value=
+[[[1 1]
+  [1 1]]
+ [[1 1]
+  [1 1]]])}
+#   2: ✗construct.13:[CNode]47{[0]: ValueNode<FuncGraph> ↓construct.46, [1]: x}
+#   3: ✗construct.13:[CNode]48{[0]: ValueNode<Primitive> Return, [1]: [CNode]47}
+
+
+#===============================================================================
+# num of function graphs in stack: 7/8 (Ignored 1 internal frames).

@@ -5,7 +5,10 @@ from mindspore import Tensor
 from mindspore.common.initializer import Normal, Zero
 import mindspore.nn.probability.distribution as msd
 import copy
-from .. import utils
+import sys
+sys.path.append("..")
+import numpy as np
+import utils
 
 matmul = ops.MatMul()
 exp = ops.Exp()
@@ -66,7 +69,8 @@ class ConvBlock2D(nn.SequentialCell):
     def __init__(self, in_channel, out_channel, ker_size, padding, stride, bn=True, act='lrelu'):
         super(ConvBlock2D, self).__init__()
         self.append(nn.Conv2d(in_channel, out_channel, kernel_size=ker_size,
-                              stride=stride, padding=padding, weight_init=Normal(0.0, 0.02)))
+                              stride=stride, padding=padding, weight_init=Normal(0.0, 0.02),
+                              pad_mode='pad', has_bias=True))
         if bn:
             self.append(nn.BatchNorm2d(out_channel))
         if act is not None:
@@ -79,13 +83,18 @@ class ConvBlock2DSN(nn.SequentialCell):
         if bn:
             self.append(utils.SpectualNormConv2d(in_channel, out_channel, 
                                                  kernel_size=ker_size,
-                                                 stride=stride, padding=padding))
+                                                 stride=stride, padding=padding,
+                                                 pad_mode='pad', has_bias=True))
             self.append(nn.Conv2d(in_channel, out_channel, kernel_size=ker_size,
-                                  stride=stride, padding=padding, weight_init=Normal(0.0, 0.02)))
+                                  stride=stride, padding=padding, weight_init=Normal(0.0, 0.02),
+                                  pad_mode='pad', has_bias=True))
         else:
+            paddings = ((padding, padding), (padding, padding), 
+                        (padding, padding), (padding, padding))
+            self.append(nn.Pad(paddings=paddings, mode='REFLECT'))  # FIXME: reflect pad
             self.append(nn.Conv2d(in_channel, out_channel, kernel_size=ker_size, 
-                                  stride=stride, padding=padding, pad_mode='reflect',
-                                  weight_init=Normal(0.0, 0.02)))
+                                  stride=stride,weight_init=Normal(0.0, 0.02),
+                                  pad_mode='valid', has_bias=True))
         if act is not None:
             self.append(get_activation(act))
 
@@ -140,14 +149,16 @@ class Encode2DVAE_nb(nn.Cell):
 
         self.features = FeatureExtractor(opt.nc_im, opt.nfc, opt.ker_size, 
                                          opt.ker_size // 2, 1, num_blocks=num_blocks)
-        self.mu = nn.SequentialCell(
-            ConvBlock2D(opt.nfc, output_dim, opt.ker_size, opt.ker_size // 2, 1, bn=False, act=None),
-            ops.AdaptiveAvgPool2D(1)
-        )
-        self.logvar = nn.SequentialCell(
-            ConvBlock2D(opt.nfc, output_dim, opt.ker_size, opt.ker_size // 2, 1, bn=False, act=None),
-            ops.AdaptiveAvgPool2D(1)
-        )
+        self.mu = nn.SequentialCell()
+        self.mu.append(ConvBlock2D(opt.nfc, output_dim, opt.ker_size, opt.ker_size // 2, 1, 
+                                   bn=False, act=None))
+        self.mu.append(ops.AdaptiveAvgPool2D(1))     # FIXME: 没有nn
+        
+        self.logvar = nn.SequentialCell()
+        self.logvar.append(ConvBlock2D(opt.nfc, output_dim, opt.ker_size, opt.ker_size // 2, 1, 
+                                       bn=False, act=None))
+        # self.logvar.append(nn.AdaptiveAvgPool2D(1))
+        
         self.bern = ConvBlock2D(opt.nfc, 1, opt.ker_size, opt.ker_size // 2, 1, bn=False, act=None)
 
     def forward(self, x):
@@ -196,7 +207,8 @@ class WDiscriminator2D(nn.Cell):
                                   opt.ker_size // 2, stride=1, bn=True, act='lrelu')
             self.body.append(block)
         self.tail = nn.Conv2d(N, 1, kernel_size=opt.ker_size, padding=1, stride=1, 
-                              weight_init=Normal(0.0, 0.02))
+                              weight_init=Normal(0.0, 0.02), 
+                              pad_mode='pad', has_bias=True)
 
     def forward(self, x):
         head = self.head(x)
@@ -221,8 +233,9 @@ class GeneratorHPVAEGAN(nn.Cell):
         for i in range(opt.num_layer):
             block = ConvBlock2D(N, N, opt.ker_size, opt.padd_size, stride=1)
             self.decoder.append(block)
-        self.decoder.append(nn.Conv2d(N, opt.nc_im, opt.ker_size, 1, opt.ker_size // 2,
-                                      weight_init=Normal(0.0, 0.02)))
+        self.decoder.append(nn.Conv2d(N, opt.nc_im, opt.ker_size, 
+                                      stride=1, padding=opt.ker_size // 2, weight_init=Normal(0.0, 0.02),
+                                      pad_mode='pad', has_bias=True))
 
         # 1x1 Decoder
         # self.decoder.append(ConvBlock2D(opt.latent_dim, N, 1, 0, stride=1))
@@ -241,8 +254,9 @@ class GeneratorHPVAEGAN(nn.Cell):
             for i in range(self.opt.num_layer):
                 block = ConvBlock2D(self.N, self.N, self.opt.ker_size, self.opt.padd_size, stride=1)
                 _first_stage.append(block)
-            _first_stage.append(nn.Conv2d(self.N, self.opt.nc_im, self.opt.ker_size, 1, 
-                                          self.opt.ker_size // 2, weight_init=Normal(0.0, 0.02)))
+            _first_stage.append(nn.Conv2d(self.N, self.opt.nc_im, self.opt.ker_size, 
+                                          stride=1, padding=self.opt.ker_size // 2, weight_init=Normal(0.0, 0.02),
+                                          pad_mode='pad', has_bias=True))
             self.body.append(_first_stage)
         else:
             self.body.append(copy.deepcopy(self.body[-1]))
@@ -305,8 +319,10 @@ class GeneratorVAE_nb(nn.Cell):
         for i in range(opt.num_layer):
             block = ConvBlock2D(N, N, opt.ker_size, opt.padd_size, stride=1)
             self.decoder.append(block)
-        self.decoder.append(nn.Conv2d(N, opt.nc_im, opt.ker_size, 1, opt.ker_size // 2,
-                                      weight_init=Normal(0.0, 0.02)))
+        self.decoder.append(nn.Conv2d(N, opt.nc_im, opt.ker_size,
+                                      stride=1, padding=opt.ker_size // 2,
+                                      weight_init=Normal(0.0, 0.02),
+                                      pad_mode='pad', has_bias=True))
 
         self.body = nn.CellList([])
 
@@ -318,9 +334,10 @@ class GeneratorVAE_nb(nn.Cell):
             for i in range(self.opt.num_layer):
                 block = ConvBlock2D(self.N, self.N, self.opt.ker_size, self.opt.padd_size, stride=1)
                 _first_stage.append(block)
-            _first_stage.append(nn.Conv2d(self.N, self.opt.nc_im, 
-                                          self.opt.ker_size, 1, self.opt.ker_size // 2,
-                                          weight_init=Normal(0.0, 0.02)))
+            _first_stage.append(nn.Conv2d(self.N, self.opt.nc_im, self.opt.ker_size, 
+                                          stride=1, padding=self.opt.ker_size // 2,
+                                          weight_init=Normal(0.0, 0.02),
+                                          pad_mode='pad', has_bias=True))
             self.body.append(_first_stage)
         else:
             self.body.append(copy.deepcopy(self.body[-1]))
@@ -368,3 +385,20 @@ class GeneratorVAE_nb(nn.Cell):
             x_prev_out = tanh(x_prev + x_prev_out_up)
 
         return x_prev_out
+
+
+if __name__ == '__main__':
+    class Opt:
+        def __init__(self):
+            self.nfc = 64
+            self.nc_im = 3
+            self.ker_size = 3
+            self.num_layer = 5
+            self.latent_dim = 128
+            self.enc_blocks = 2
+            self.padd_size = 1
+
+    opt = Opt()
+    model = GeneratorVAE_nb(opt)
+    model.init_next_stage()
+    print(model)

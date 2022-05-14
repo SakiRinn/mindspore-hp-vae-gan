@@ -1,5 +1,4 @@
 from mindspore import Tensor
-import torch.nn.functional as F # FIXME: interpolate替代？
 import mindspore.ops as ops
 from mindspore.common.initializer import Zero
 import mindspore.nn.probability.distribution as msd
@@ -14,23 +13,27 @@ uniform = msd.Uniform(0, 1)
 uniform_int = ops.UniformInt()
 
 
-def interpolate(input, size=None, scale_factor=None, interpolation='bilinear'):
+def interpolate(input, size=None):
+    resize_bilinear = ops.ResizeBilinear(size, align_corners=True)    # FIXME: half_pixel_centers?
+    
     if input.dim() == 5:
         b, c, t, h0, w0 = input.shape
         img = transpose(input, (0, 2, 1, 3, 4)).reshape(input.shape[0] + input.shape[1],
                                                         *input.shape[2:])  # (B+T)CHW
-        scaled = F.interpolate(img, size=size, scale_factor=scale_factor, mode=interpolation, align_corners=True)
+        scaled = resize_bilinear(img)
         _, _, h1, w1 = scaled.shape
         scaled = transpose(scaled.reshape(b, t, c, h1, w1), (0, 2, 1, 3, 4))
     else:
-        scaled = F.interpolate(input, size=size, scale_factor=scale_factor, mode=interpolation, align_corners=True)
+        scaled = resize_bilinear(input)
 
     return scaled
 
 
-def interpolate_3D(input, size=None, scale_factor=None, interpolation='trilinear'):
+def interpolate_3D(input, size=None):
     assert input.dim() == 5, "input must be 5D"
-    scaled = F.interpolate(input, size=size, scale_factor=scale_factor, mode=interpolation, align_corners=True)
+    
+    resize_bilinear = ops.ResizeBilinear(size, align_corners=True)    # FIXME: 没有三线性插值
+    scaled = resize_bilinear(input)
 
     return scaled
 
