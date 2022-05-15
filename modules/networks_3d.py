@@ -75,15 +75,10 @@ class ConvBlock3DSN(nn.SequentialCell):
                                   stride=stride, padding=padding, weight_init=Normal(0.0, 0.02),
                                   pad_mode='pad', has_bias=True))
         else:
-            # paddings = ((padding, padding), (padding, padding), 
-            #             (padding, padding), (padding, padding),
-            #             (padding, padding), (padding, padding),
-            #             (padding, padding), (padding, padding),
-            #             (padding, padding), (padding, padding))
-            # self.append(nn.Pad(paddings=paddings, mode='REFLECT'))  # FIXME: reflect pad
+            # self.append(nn.Pad(paddings=padding, mode='REFLECT'))
             self.append(nn.Conv3d(in_channel, out_channel, kernel_size=ker_size, 
                                   stride=stride, weight_init=Normal(0.0, 0.02),
-                                  pad_mode='valid', has_bias=False))
+                                  pad_mode='same', has_bias=False))    # TODO: reflect + valid
         if act is not None:
             self.append(get_activation(act))
 
@@ -139,21 +134,21 @@ class Encode3DVAE_nb(nn.Cell):
         self.mu = nn.SequentialCell()
         self.mu.append(ConvBlock3D(opt.nfc, output_dim, opt.ker_size, opt.ker_size // 2, 1, 
                                    bn=False, act=None))
-        # self.mu.append(ops.ReduceMean(keep_dims=True))    # FIXME: 没有nn
         
         self.logvar = nn.SequentialCell()
         self.logvar.append(ConvBlock3D(opt.nfc, output_dim, opt.ker_size, opt.ker_size // 2, 1,
                                        bn=False, act=None))
-        # self.logvar.append(ops.ReduceMean(keep_dims=True))
         
         self.bern = ConvBlock3D(opt.nfc, 1, opt.ker_size, opt.ker_size // 2, 1, bn=False, act=None)
 
     def forward(self, x):
+        reduce_mean = ops.ReduceMean(keep_dims=True)
+        
         features = self.features(x)
         bern = sigmoid(self.bern(features))
         features = bern * features
-        mu = self.mu(features)
-        logvar = self.logvar(features)
+        mu = reduce_mean(self.mu(features))
+        logvar = reduce_mean(self.logvar(features))
 
         return mu, logvar, bern
 
@@ -531,6 +526,7 @@ if __name__ == '__main__':
             self.img_size = 256
     
     opt = Opt()
-    model = GeneratorVAE_nb(opt)
-    model.init_next_stage()
+    x = np.ones([64, 3, 3, 3, 3])
+    model = Encode3DVAE_nb(opt)
+    # print(model(x)[0].shape, model(x)[1].shape, model(x)[2].shape)
     print(model)

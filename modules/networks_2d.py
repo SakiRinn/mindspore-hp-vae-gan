@@ -152,7 +152,6 @@ class Encode2DVAE_nb(nn.Cell):
         self.mu = nn.SequentialCell()
         self.mu.append(ConvBlock2D(opt.nfc, output_dim, opt.ker_size, opt.ker_size // 2, 1, 
                                    bn=False, act=None))
-        self.mu.append(ops.AdaptiveAvgPool2D(1))     # FIXME: 没有nn
         
         self.logvar = nn.SequentialCell()
         self.logvar.append(ConvBlock2D(opt.nfc, output_dim, opt.ker_size, opt.ker_size // 2, 1, 
@@ -162,11 +161,13 @@ class Encode2DVAE_nb(nn.Cell):
         self.bern = ConvBlock2D(opt.nfc, 1, opt.ker_size, opt.ker_size // 2, 1, bn=False, act=None)
 
     def forward(self, x):
+        reduce_mean = ops.ReduceMean(keep_dims=True)
+        
         features = self.features(x)
         bern = sigmoid(self.bern(features))
         features = bern * features
-        mu = self.mu(features)
-        logvar = self.logvar(features)
+        mu = reduce_mean(self.mu(features))
+        logvar = reduce_mean(self.logvar(features))
 
         return mu, logvar, bern
 
