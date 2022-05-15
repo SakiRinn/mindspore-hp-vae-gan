@@ -5,9 +5,11 @@ import mindspore.ops as ops
 from mindspore.dataset.vision.c_transforms import Normalize
 import numpy as np
 import cv2
-from . import video_to_frames
-import utils
+from generate_frames import video_to_frames
 import logging
+import sys
+sys.path.append('../')
+import utils
 
 transpose = ops.Transpose()
 hflip_func = ops.ReverseV2(axis=[-1])
@@ -77,6 +79,7 @@ class SingleVideoDataset(Dataset):
     @staticmethod
     def _get_transformed_frames(frames, hflip):
         frames_transformed = frames
+
         if hflip:
             frames_transformed = hflip_func(frames_transformed)
         # Normalize
@@ -91,8 +94,37 @@ class SingleVideoDataset(Dataset):
                                               self.opt.stop_scale, self.opt.img_size)
         scaled_size = [int(base_size * self.opt.ar), base_size]
         self.opt.scaled_size = scaled_size
-
         return video_to_frames(self.opt)
 
     def generate_frames(self, scale_idx):
         self.frames = self._generate_frames(scale_idx)
+
+
+if __name__ == '__main__':
+    class Opt:
+        def __init__(self):
+            self.nfc = 64
+            self.nc_im = 3
+            self.ker_size = 3
+            self.num_layer = 5
+            self.latent_dim = 128
+            self.enc_blocks = 2
+            self.padd_size = 1
+            self.image_path = '../data/imgs/air_balloons.jpg'
+            self.video_path = '../data/vids/air_balloons.mp4'
+            self.hflip = False
+            self.img_size = 256
+            self.data_rep = 1000
+            self.scale_factor = 0.75
+            self.stop_scale = 9
+            self.scale_idx = 0
+            self.sampling_rates = [4, 3, 2, 1]
+            self.start_frame = 0
+            self.max_frames = 13
+            # self.fps_index = 
+
+    opt = Opt()
+    # 实例化数据集类
+    dataset_generator = SingleVideoDataset(opt)
+    # 打印数据条数
+    print(dataset_generator[0])

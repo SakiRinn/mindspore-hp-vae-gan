@@ -7,13 +7,11 @@ import logging
 import os
 from mindspore.dataset.vision.c_transforms import Normalize
 import mindspore.dataset as ds
-import sys
-sys.path.append("../")
 import utils
 
 transpose = ops.Transpose()
 hflip_func = ops.ReverseV2(axis=[-1])
-normalize = Normalize(mean=[0.5], std=[0.5])    # FIXME: 3通道
+normalize = Normalize(mean=[0.5], std=[0.5])
 
 
 class SingleImageDataset(ds.Dataset):
@@ -68,11 +66,13 @@ class SingleImageDataset(ds.Dataset):
     @staticmethod
     def _get_transformed_images(images, hflip):
         images_transformed = images
+
         if hflip:
             images_transformed = hflip_func(images_transformed)
         # Normalize
         images_transformed = normalize(images_transformed)
-        return images_transformed
+
+        return images_transformed.reshape(1, *images_transformed.shape)
 
     def generate_image(self, scale_idx):
         base_size = utils.get_scales_by_index(scale_idx, self.opt.scale_factor, 
@@ -86,7 +86,6 @@ class SingleImageDataset(ds.Dataset):
 if __name__ == '__main__':
     class Opt:
         def __init__(self):
-            # Model
             self.nfc = 64
             self.nc_im = 3
             self.ker_size = 3
@@ -94,17 +93,16 @@ if __name__ == '__main__':
             self.latent_dim = 128
             self.enc_blocks = 2
             self.padd_size = 1
-            # Dataset
             self.image_path = '../data/imgs/air_balloons.jpg'
             self.hflip = False
             self.img_size = 256
             self.data_rep = 1000
-            # Train
+            self.scale_factor = 0.75
+            self.stop_scale = 9
             self.scale_idx = 0
     
     opt = Opt()
     # 实例化数据集类
     dataset_generator = SingleImageDataset(opt)
-    dataset = ds.GeneratorDataset(dataset_generator, shuffle=False)
     # 打印数据条数
-    print("data size:", dataset.get_dataset_size())
+    print(dataset_generator[0])
