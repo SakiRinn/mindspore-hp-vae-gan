@@ -1,16 +1,13 @@
 import random
 import numpy as np
-import mindspore.ops as ops
 import imageio
 import cv2
 import logging
 import os
 from mindspore.dataset.vision.c_transforms import Normalize
 import mindspore.dataset as ds
-import utils
+from .. import utils
 
-transpose = ops.Transpose()
-hflip_func = ops.ReverseV2(axis=[-1])
 normalize = Normalize(mean=[0.5], std=[0.5])
 
 
@@ -68,11 +65,11 @@ class SingleImageDataset(ds.Dataset):
         images_transformed = images
 
         if hflip:
-            images_transformed = hflip_func(images_transformed)
+            images_transformed = np.flip(images_transformed, -1)
         # Normalize
         images_transformed = normalize(images_transformed)
 
-        return images_transformed.reshape(1, *images_transformed.shape)
+        return images_transformed
 
     def generate_image(self, scale_idx):
         base_size = utils.get_scales_by_index(scale_idx, self.opt.scale_factor, 
@@ -94,7 +91,7 @@ if __name__ == '__main__':
             self.enc_blocks = 2
             self.padd_size = 1
             self.image_path = '../data/imgs/air_balloons.jpg'
-            self.hflip = False
+            self.hflip = True
             self.img_size = 256
             self.data_rep = 1000
             self.scale_factor = 0.75
@@ -106,3 +103,4 @@ if __name__ == '__main__':
     dataset_generator = SingleImageDataset(opt)
     # 打印数据条数
     print(dataset_generator[0])
+    print(dataset_generator[0].shape)

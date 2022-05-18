@@ -13,7 +13,7 @@ import torch.optim as optim
 
 from modules import networks_3d
 from modules.losses import kl_criterion
-from modules.utils import *
+from modules.util import *
 from datasets import SingleVideoDataset
 
 clear = colorama.Style.RESET_ALL

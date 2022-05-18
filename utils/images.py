@@ -4,6 +4,9 @@ from mindspore.common.initializer import Zero
 import mindspore.nn.probability.distribution as msd
 import math
 
+import mindspore
+mindspore.context.set_context(device_target='Ascend', device_id=4)
+
 __all__ = ['interpolate', 'interpolate_3D', 'adjust_scales2image', 'generate_noise', 'get_scales_by_index',
            'get_fps_td_by_index', 'get_fps_by_index', 'upscale', 'upscale_2d']
 transpose = ops.Transpose()
@@ -14,7 +17,7 @@ uniform_int = ops.UniformInt()
 
 
 def interpolate(input, size=None):
-    resize_bilinear = ops.ResizeBilinear(size, align_corners=True)    # FIXME: half_pixel_centers?
+    resize_bilinear = ops.ResizeBilinear(size, align_corners=True)    # TODO: align_corners
     
     if input.dim() == 5:
         b, c, t, h0, w0 = input.shape

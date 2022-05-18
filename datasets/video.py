@@ -1,22 +1,17 @@
 import os
 import random
-from mindspore.dataset import Dataset
-import mindspore.ops as ops
+import mindspore.dataset as ds
 from mindspore.dataset.vision.c_transforms import Normalize
 import numpy as np
 import cv2
 from generate_frames import video_to_frames
 import logging
-import sys
-sys.path.append('../')
-import utils
+from .. import utils
 
-transpose = ops.Transpose()
-hflip_func = ops.ReverseV2(axis=[-1])
 normalize = Normalize(mean=[0.5], std=[0.5])
 
 
-class SingleVideoDataset(Dataset):
+class SingleVideoDataset(ds.Dataset):
     def __init__(self, opt, transforms=None):
         super(SingleVideoDataset, self).__init__()
 
@@ -53,8 +48,9 @@ class SingleVideoDataset(Dataset):
 
         # Horizontal flip (Until Kornia will handle videos
         hflip = random.random() < 0.5 if self.opt.hflip else False
-
         every = self.opt.sampling_rates[self.opt.fps_index]
+        
+        self.generate_frames(opt.scale_idx)
         frames = self.frames[idx:idx + self.opt.fps_lcm + 1:every]
         frames = np.array(frames).transpose(2, 0, 1).astype(np.float32) \
                     if frames.ndim == 3 else \
@@ -81,9 +77,10 @@ class SingleVideoDataset(Dataset):
         frames_transformed = frames
 
         if hflip:
-            frames_transformed = hflip_func(frames_transformed)
+            frames_transformed = np.flip(frames_transformed, -1)
         # Normalize
-        frames_transformed = normalize(frames_transformed)
+        for T in range(frames_transformed.shape[0]):    # TODO: normalize无法处理4维
+            frames_transformed[T] = normalize(frames_transformed[T])
         # Permute CTHW
         frames_transformed = frames_transformed.transpose(1, 0, 2, 3)
 
@@ -112,19 +109,26 @@ if __name__ == '__main__':
             self.padd_size = 1
             self.image_path = '../data/imgs/air_balloons.jpg'
             self.video_path = '../data/vids/air_balloons.mp4'
-            self.hflip = False
+            self.hflip = True
             self.img_size = 256
             self.data_rep = 1000
             self.scale_factor = 0.75
             self.stop_scale = 9
+            self.stop_scale_time = 9
             self.scale_idx = 0
             self.sampling_rates = [4, 3, 2, 1]
             self.start_frame = 0
             self.max_frames = 13
-            # self.fps_index = 
+            
+        def get_fps_index(self):
+            fps, td, fps_index = utils.get_fps_td_by_index(self.scale_idx, self)
+            self.fps = fps
+            self.td = td
+            self.fps_index = fps_index
 
     opt = Opt()
     # 实例化数据集类
     dataset_generator = SingleVideoDataset(opt)
+    opt.get_fps_index()
     # 打印数据条数
-    print(dataset_generator[0])
+    print(dataset_generator[0].shape)

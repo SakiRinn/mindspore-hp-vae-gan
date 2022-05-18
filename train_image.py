@@ -7,14 +7,13 @@ from utils import logger, tools
 import logging
 import colorama
 
-import torch
 import mindspore
 import mindspore.nn as nn
 import mindspore.ops as ops
 
 from modules import networks_2d
 from modules.losses import kl_criterion
-from modules.utils import calc_gradient_penalty
+from modules.util import calc_gradient_penalty
 from datasets.image import SingleImageDataset
 
 clear = colorama.Style.RESET_ALL
