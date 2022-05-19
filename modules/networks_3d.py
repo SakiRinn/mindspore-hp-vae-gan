@@ -10,7 +10,7 @@ from mindspore import nn
 from mindspore.common.initializer import Normal, Zero
 
 import sys
-sys.path.append('..')
+sys.path.insert(0, '..')
 sys.path.append('../datasets')
 import datasets
 import utils
@@ -553,12 +553,14 @@ if __name__ == '__main__':
             capture = cv2.VideoCapture(self.video_path)
             self.org_fps = capture.get(cv2.CAP_PROP_FPS)
             self.fps_lcm = np.lcm.reduce(self.sampling_rates)
+            self.Noise_Amps = [1, 1, 1]
 
     opt = Opt()
-    opt.Noise_Amps = [1, 1, 1]
     dataset = datasets.SingleImageDataset(opt)
+    sn = ConvBlock3DSN(opt.nc_im, int(opt.nfc), opt.ker_size, opt.ker_size // 2, 
+                       stride=1, bn=True, act='lrelu')
     model = GeneratorCSG(opt)
     model.init_next_stage()
     from mindspore.common.initializer import One
     x = Tensor(shape=(64, 3, 3, 3, 3), init=One(), dtype=mstype.float32)
-    print(model(x, opt.Noise_Amps))
+    print(sn(x))
