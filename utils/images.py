@@ -1,9 +1,9 @@
+import math
 from mindspore import Tensor
 import mindspore.ops as ops
 from mindspore.common.initializer import Zero
 from mindspore import dtype as mstype
 import mindspore.nn.probability.distribution as msd
-import math
 
 import numpy as np  # TODO: 替代三线性插值，待移除
 import torch

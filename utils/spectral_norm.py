@@ -1,7 +1,7 @@
 import mindspore
 import mindspore.nn as nn
 import mindspore.ops as ops
-from mindspore.nn.layer.conv import _check_input_3d
+from mindspore.nn.layer.conv import _check_input_3d, _check_input_5dims
 
 stdnormal = ops.StandardNormal(seed=43)
 l2normalize = ops.L2Normalize(epsilon=1e-12)
@@ -140,6 +140,8 @@ class SpectualNormConv3d(nn.Conv3d):
         self.weight_v = mindspore.Parameter(l2normalize(stdnormal((width,1))), requires_grad=False)
     
     def construct(self, x):
+        x_shape = self.shape(x)         #
+        _check_input_5dims(x_shape)     #
         height = self.weight.shape[0]
         for _ in range(self.power_iterations):
             self.weight_v = l2normalize(ops.tensor_dot(self.weight.view(height, -1).T, self.weight_u, axes=1))

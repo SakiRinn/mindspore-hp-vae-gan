@@ -1,12 +1,13 @@
+import logging
 import os
 import random
-import mindspore.dataset as ds
-from mindspore.dataset.vision.c_transforms import Normalize
-import numpy as np
 import cv2
-from . import video_to_frames
-import logging
+import mindspore.dataset as ds
+import numpy as np
+from mindspore.dataset.vision.c_transforms import Normalize
+
 import utils
+from . import video_to_frames
 
 normalize = Normalize(mean=[0.5], std=[0.5])
 

@@ -1,8 +1,8 @@
 import mindspore.nn as nn
 import mindspore.ops as ops
 from mindspore import Tensor
-from mindspore.common.initializer import Normal, One
 from mindspore import dtype as mstype
+from mindspore.common.initializer import Normal, One
 
 concat = ops.Concat()
 

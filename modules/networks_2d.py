@@ -1,16 +1,18 @@
 from __future__ import absolute_import, division, print_function
+
+import copy
 import mindspore.nn as nn
+import mindspore.nn.probability.distribution as msd
 import mindspore.ops as ops
 from mindspore import Tensor
-from mindspore.common.initializer import Normal, Zero
 from mindspore import dtype as mstype
-import mindspore.nn.probability.distribution as msd
-import copy
+from mindspore.common.initializer import Normal, Zero
+
 import sys
-sys.path.append("..")
+sys.path.insert(0, "..")
 sys.path.append("../datasets")
-import utils
 import datasets
+import utils
 
 matmul = ops.MatMul()
 exp = ops.Exp()

@@ -1,8 +1,8 @@
-import os
-import mindspore
 import glob
-import numpy as np
+import os
 import cv2
+import mindspore
+import numpy as np
 
 
 def write_video(array, filename, opt):
