@@ -105,6 +105,53 @@ class SpectualNormConv1d(nn.Conv1d):
         output = self.squeeze(output)   #
         return output
     
+    
+class SpectualNormConv3d(nn.Conv3d):
+    def __init__(self,
+                 in_channels,
+                 out_channels,
+                 kernel_size,
+                 stride=1,
+                 pad_mode='same',
+                 padding=0,
+                 dilation=1,
+                 group=1,
+                 has_bias=False,
+                 weight_init='normal',
+                 bias_init='zeros',
+                 data_format='NCHW',
+                 power_iterations=1):
+        super(SpectualNormConv3d, self).__init__(
+            in_channels,
+            out_channels,
+            kernel_size,
+            stride,
+            pad_mode,
+            padding,
+            dilation,
+            group,
+            has_bias,
+            weight_init,
+            bias_init)
+        self.power_iterations = power_iterations
+        height = self.weight.shape[0]
+        width = self.weight.view(height, -1).shape[1]
+        self.weight_u = mindspore.Parameter(l2normalize(stdnormal((height,1))), requires_grad=False)
+        self.weight_v = mindspore.Parameter(l2normalize(stdnormal((width,1))), requires_grad=False)
+    
+    def construct(self, x):
+        height = self.weight.shape[0]
+        for _ in range(self.power_iterations):
+            self.weight_v = l2normalize(ops.tensor_dot(self.weight.view(height, -1).T, self.weight_u, axes=1))
+            self.weight_u = l2normalize(ops.tensor_dot(self.weight.view(height, -1), self.weight_v, axes=1))
+        sigma = ops.tensor_dot(self.weight_u.T, self.weight.view(height, -1), axes=1)
+        sigma = ops.tensor_dot(sigma, self.weight_v, axes=1)
+        weight = self.weight / sigma
+        output = self.conv3d(x, weight)
+        if self.has_bias:
+            output = self.bias_add(output, self.bias)
+        return output
+    
 
 if __name__=="__main__":
     from mindspore import context

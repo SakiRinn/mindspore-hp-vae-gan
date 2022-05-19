@@ -6,7 +6,11 @@ from mindspore.common.initializer import Normal, Zero
 from mindspore import dtype as mstype
 import mindspore.nn.probability.distribution as msd
 import copy
+import sys
+sys.path.append("..")
+sys.path.append("../datasets")
 import utils
+import datasets
 
 matmul = ops.MatMul()
 exp = ops.Exp()
@@ -15,24 +19,6 @@ tanh = ops.Tanh()
 sigmoid = ops.Sigmoid()
 bernoulli = msd.Bernoulli(0.5)
 uniform = msd.Uniform(0, 1)
-
-
-# Unused.
-# def conv_weights_init_ones(m):
-#     classname = m.__class__.__name__
-#     if classname.find('Conv2d') == 0 or classname.find('Conv2d') == 0:
-#         m.weight.data.fill_(1 / np.prod(m.kernel_size))
-#         m.bias.data.fill_(0)
-
-
-# Unused.
-# def weights_init(m):
-#     classname = m.__class__.__name__
-#     if classname.find('Conv2d') != -1 or classname.find('Conv3d') != -1:
-#         m.weight.data = Tensor(shape=m.weight.data.shape, init=Normal(0.0, 0.02))
-#     elif classname.find('Norm') != -1:
-#         m.weight.data = Tensor(shape=m.weight.data.shape, init=Normal(1.0, 0.02))
-#         m.bias.data = Tensor(shape=m.weight.data.shape, init=Zero())
 
 
 def get_activation(act):
@@ -83,10 +69,12 @@ class ConvBlock2DSN(nn.SequentialCell):
                                                  stride=stride, weight_init=Normal(0.02, 0.0),
                                                  padding=padding, pad_mode='pad', has_bias=True))
         else:
-            # self.append(nn.Pad(paddings=padding, mode='REFLECT'))
+            paddings = ((0, 0), (0, 0),
+                        (padding, padding), (padding, padding), (padding, padding))
+            self.append(nn.Pad(paddings=paddings, mode='REFLECT'))
             self.append(nn.Conv2d(in_channel, out_channel, kernel_size=ker_size, 
                                   stride=stride, weight_init=Normal(0.02, 0.0),
-                                  pad_mode='same', has_bias=True))    # TODO: reflect+valid, padding=padding
+                                  pad_mode='valid', has_bias=True))
         if act is not None:
             self.append(get_activation(act))
 
@@ -358,7 +346,7 @@ class GeneratorVAE_nb(nn.Cell):
             x_prev_out = self.refinement_layers(0, vae_out, noise_amp, mode)
 
         if noise_init_norm is None:
-            return x_prev_out, vae_out, (mu, logvar, bern)      # FIXME: BUG，mu未定义
+            return x_prev_out, vae_out, (mu, logvar, bern)
         else:
             return x_prev_out, vae_out
 
@@ -404,7 +392,7 @@ if __name__ == '__main__':
     opt = Opt()
     opt.Noise_Amps = [1, 1, 1]
     dataset = datasets.SingleImageDataset(opt)
-    model = GeneratorVAE_nb(opt)
+    model = GeneratorHPVAEGAN(opt)
     model.init_next_stage()
     from mindspore.common.initializer import One
     x = Tensor(shape=(64, 3, 3, 3), init=One(), dtype=mstype.float32)

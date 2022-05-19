@@ -5,8 +5,12 @@ from mindspore import dtype as mstype
 import mindspore.nn.probability.distribution as msd
 import math
 
+import numpy as np  # TODO: 替代三线性插值，待移除
+import torch
+import torch.nn.functional as F
+
 import mindspore
-mindspore.context.set_context(device_target='Ascend', device_id=7)
+mindspore.context.set_context(device_target='Ascend', device_id=5)
 
 __all__ = ['interpolate', 'interpolate_3D', 'adjust_scales2image', 'generate_noise', 'get_scales_by_index',
            'get_fps_td_by_index', 'get_fps_by_index', 'upscale', 'upscale_2d']
@@ -34,10 +38,16 @@ def interpolate(input, size=None):
 
 
 def interpolate_3D(input, size=None):
-    assert input.dim() == 5, "input must be 5D"
+    # assert input.dim() == 5, "input must be 5D"
+    if input.dim() != 5:
+        exit(1)
+    # resize_bilinear = ops.ResizeTrilinear(size, align_corners=True)    # FIXME: 没有三线性插值
+    # scaled = resize_bilinear(input)
     
-    resize_bilinear = ops.ResizeBilinear(size, align_corners=True)    # FIXME: 没有三线性插值
-    scaled = resize_bilinear(input)
+    input = input.asnumpy()
+    input = torch.Tensor(input)
+    scaled = F.interpolate(input, size=size, align_corners=True).to(np.float32)
+    scaled = Tensor(scaled)
 
     return scaled
 
@@ -59,7 +69,8 @@ def generate_noise(ref=None, size=None, type='normal', emb_size=None):
     elif size is not None:
         noise = Tensor(shape=size, init=Zero())
     else:
-        raise Exception("ref or size must be applied")
+        # raise Exception("ref or size must be applied")
+        exit(1)
 
     if type == 'normal':
         return normal.prob(Tensor(shape=noise.shape, init=Zero(), dtype=mstype.float32))
@@ -67,7 +78,8 @@ def generate_noise(ref=None, size=None, type='normal', emb_size=None):
         return bernoulli.prob(Tensor(shape=noise.shape, init=Zero(), dtype=mstype.float32))
 
     if type == 'int':
-        assert (emb_size is not None) and (size is not None)
+        if emb_size is None or size is None:
+            exit(1)
         return uniform_int(size, 0, emb_size)
 
     return uniform.prob(Tensor(shape=noise.shape, init=Zero(), dtype=mstype.float32))  # Default == Uniform
@@ -97,7 +109,8 @@ def get_fps_td_by_index(index, opt):
 
 
 def upscale(video, index, opt):
-    assert index > 0
+    if index <= 0:
+        exit(1)
 
     next_shape = get_scales_by_index(index, opt.scale_factor, opt.stop_scale, opt.img_size)
     next_fps, next_td, _ = get_fps_td_by_index(index, opt)
@@ -110,7 +123,8 @@ def upscale(video, index, opt):
 
 
 def upscale_2d(image, index, opt):
-    assert index > 0
+    if index <= 0:
+        exit(1)
 
     next_shape = get_scales_by_index(index, opt.scale_factor, opt.stop_scale, opt.img_size)
     next_shape = [int(next_shape * opt.ar), next_shape]

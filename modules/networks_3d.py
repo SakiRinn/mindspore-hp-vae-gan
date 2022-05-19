@@ -7,7 +7,11 @@ from mindspore import dtype as mstype
 import mindspore.nn.probability.distribution as msd
 from mindspore import nn
 import copy
+import sys
+sys.path.append('..')
+sys.path.append('../datasets')
 import utils
+import datasets
 
 matmul = ops.MatMul()
 exp = ops.Exp()
@@ -65,14 +69,17 @@ class ConvBlock3DSN(nn.SequentialCell):
     def __init__(self, in_channel, out_channel, ker_size, padding, stride, bn=True, act='lrelu'):
         super(ConvBlock3DSN, self).__init__()
         if bn:
-            self.append(utils.SpectualNormConv2d(in_channel, out_channel, kernel_size=ker_size,
+            self.append(utils.SpectualNormConv3d(in_channel, out_channel, kernel_size=ker_size,
                                                  stride=stride, padding=padding, weight_init=Normal(0.02, 0.0),
-                                                 pad_mode='pad', has_bias=True))    # FIXME: 3D谱归一化
+                                                 pad_mode='pad', has_bias=True))
         else:
-            # self.append(nn.Pad(paddings=padding, mode='REFLECT'))
+            paddings = ((0, 0), (0, 0),
+                        (padding, padding), (padding, padding), 
+                        (padding, padding), (padding, padding))
+            self.append(nn.Pad(paddings=paddings, mode='REFLECT'))
             self.append(nn.Conv3d(in_channel, out_channel, kernel_size=ker_size, 
                                   stride=stride, weight_init=Normal(0.02, 0.0),
-                                  pad_mode='same', has_bias=False))    # TODO: reflect+valid, padding=padding
+                                  pad_mode='valid', has_bias=False))
         if act is not None:
             self.append(get_activation(act))
 
@@ -204,7 +211,8 @@ class WDiscriminatorBaselines(nn.Cell):
 
         self.opt = opt
         N = int(opt.nfc)
-        self.p3d = ((self.opt.num_layer + 2, self.opt.num_layer + 2),
+        self.p3d = ((0, 0), (0, 0),
+                    (self.opt.num_layer + 2, self.opt.num_layer + 2),
                     (self.opt.num_layer + 2, self.opt.num_layer + 2),
                     (self.opt.num_layer + 2, self.opt.num_layer + 2))
 
@@ -237,10 +245,10 @@ class GeneratorCSG(nn.Cell):
         self.opt = opt
         N = int(opt.nfc)
 
-        self.p3d_once = ((1, 1),
-                         (1, 1),
-                         (1, 1))
-        self.p3d = ((self.opt.num_layer + 0, self.opt.num_layer + 0),
+        self.p3d_once = ((0, 0), (0, 0),
+                         (1, 1), (1, 1), (1, 1))
+        self.p3d = ((0, 0), (0, 0),
+                    (self.opt.num_layer + 0, self.opt.num_layer + 0),
                     (self.opt.num_layer + 0, self.opt.num_layer + 0),
                     (self.opt.num_layer + 0, self.opt.num_layer + 0))
 
@@ -298,7 +306,8 @@ class GeneratorSG(nn.Cell):
         self.opt = opt
         N = int(opt.nfc)
 
-        self.p3d = ((self.opt.num_layer + 2, self.opt.num_layer + 2),
+        self.p3d = ((0, 0), (0, 0),
+                    (self.opt.num_layer + 2, self.opt.num_layer + 2),
                     (self.opt.num_layer + 2, self.opt.num_layer + 2),
                     (self.opt.num_layer + 2, self.opt.num_layer + 2))
 
@@ -527,19 +536,27 @@ if __name__ == '__main__':
             self.enc_blocks = 2
             self.padd_size = 1
             self.image_path = '../data/imgs/air_balloons.jpg'
+            self.video_path = '../data/vids/air_balloons.mp4'
             self.hflip = True
             self.img_size = 256
             self.data_rep = 1000
             self.scale_factor = 0.75
             self.stop_scale = 9
+            self.stop_scale_time = 9
             self.scale_idx = 0
             self.vae_levels = 3
+            self.sampling_rates = [4, 3, 2, 1]
+            import cv2
+            import numpy as np
+            capture = cv2.VideoCapture(self.video_path)
+            self.org_fps = capture.get(cv2.CAP_PROP_FPS)
+            self.fps_lcm = np.lcm.reduce(self.sampling_rates)
 
     opt = Opt()
     opt.Noise_Amps = [1, 1, 1]
     dataset = datasets.SingleImageDataset(opt)
-    model = WDiscriminatorBaselines(opt)
-    # model.init_next_stage()
+    model = GeneratorCSG(opt)
+    model.init_next_stage()
     from mindspore.common.initializer import One
     x = Tensor(shape=(64, 3, 3, 3, 3), init=One(), dtype=mstype.float32)
-    print(model(x))
+    print(model(x, opt.Noise_Amps))
