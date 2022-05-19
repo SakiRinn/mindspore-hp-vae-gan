@@ -358,7 +358,7 @@ class GeneratorVAE_nb(nn.Cell):
             x_prev_out = self.refinement_layers(0, vae_out, noise_amp, mode)
 
         if noise_init_norm is None:
-            return x_prev_out, vae_out, (mu, logvar, bern)
+            return x_prev_out, vae_out, (mu, logvar, bern)      # FIXME: BUG，mu未定义
         else:
             return x_prev_out, vae_out
 
