@@ -2,6 +2,7 @@ import mindspore.nn as nn
 import mindspore.ops as ops
 from mindspore import Tensor
 from mindspore.common.initializer import Normal, One
+from mindspore import dtype as mstype
 
 concat = ops.Concat()
 
@@ -18,8 +19,9 @@ class GradNetWrtX(nn.Cell):
 
 
 def calc_gradient_penalty(netD, real_data, fake_data, LAMBDA=1):
-    alpha = Tensor(shape=(1, 1), init=Normal())
-    alpha = alpha.expand_as(Tensor(shape=(real_data.size()), init=One()))
+    alpha = Tensor(shape=(1, 1), init=Normal(), dtype=mstype.float32)
+    alpha = alpha.expand_as(Tensor(shape=(real_data.size()), 
+                                   init=One(), dtype=mstype.float32))
 
     interpolates = (alpha * real_data + ((1 - alpha) * fake_data))
     # disc_interpolates = netD(interpolates)

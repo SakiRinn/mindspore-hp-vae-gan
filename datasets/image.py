@@ -6,7 +6,7 @@ import logging
 import os
 from mindspore.dataset.vision.c_transforms import Normalize
 import mindspore.dataset as ds
-from .. import utils
+import utils
 
 normalize = Normalize(mean=[0.5], std=[0.5])
 

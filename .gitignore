@@ -127,3 +127,9 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+modules/kernel_meta
+modules/rank_0/
+datasets/kernel_meta
+datasets/rank_0
+rank_0

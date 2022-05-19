@@ -1,11 +1,12 @@
 from mindspore import Tensor
 import mindspore.ops as ops
 from mindspore.common.initializer import Zero
+from mindspore import dtype as mstype
 import mindspore.nn.probability.distribution as msd
 import math
 
 import mindspore
-mindspore.context.set_context(device_target='Ascend', device_id=4)
+mindspore.context.set_context(device_target='Ascend', device_id=7)
 
 __all__ = ['interpolate', 'interpolate_3D', 'adjust_scales2image', 'generate_noise', 'get_scales_by_index',
            'get_fps_td_by_index', 'get_fps_by_index', 'upscale', 'upscale_2d']
@@ -54,22 +55,22 @@ def adjust_scales2image(size, opt):
 def generate_noise(ref=None, size=None, type='normal', emb_size=None):
     # Initiate noise without batch size
     if ref is not None:
-        noise = Tensor(shape=ref.shape, init=Zero())
+        noise = Tensor(shape=ref.shape, init=Zero(), dtype=mstype.float32)
     elif size is not None:
         noise = Tensor(shape=size, init=Zero())
     else:
         raise Exception("ref or size must be applied")
 
     if type == 'normal':
-        return normal.prob(Tensor(shape=noise.shape, init=Zero()))
+        return normal.prob(Tensor(shape=noise.shape, init=Zero(), dtype=mstype.float32))
     elif type == 'benoulli':
-        return bernoulli.prob(Tensor(shape=noise.shape, init=Zero()))
+        return bernoulli.prob(Tensor(shape=noise.shape, init=Zero(), dtype=mstype.float32))
 
     if type == 'int':
         assert (emb_size is not None) and (size is not None)
         return uniform_int(size, 0, emb_size)
 
-    return uniform.prob(Tensor(shape=noise.shape, init=Zero()))  # Default == Uniform
+    return uniform.prob(Tensor(shape=noise.shape, init=Zero(), dtype=mstype.float32))  # Default == Uniform
 
 
 def get_scales_by_index(index, scale_factor, stop_scale, img_size):

@@ -3,11 +3,9 @@ import mindspore.nn as nn
 import mindspore.ops as ops
 from mindspore import Tensor
 from mindspore.common.initializer import Normal, Zero
+from mindspore import dtype as mstype
 import mindspore.nn.probability.distribution as msd
 import copy
-import sys
-sys.path.append("..")
-import numpy as np
 import utils
 
 matmul = ops.MatMul()
@@ -43,7 +41,7 @@ def get_activation(act):
         "lrelu": nn.LeakyReLU(),
         "elu": nn.ELU(),
         "prelu": nn.PReLU(),
-        "selu": ops.SeLU() 
+        # "selu": ops.SeLU() 
     }
     return activations[act]
 
@@ -51,28 +49,28 @@ def get_activation(act):
 def reparameterize(mu, logvar, training):
     if training:
         std = exp(logvar * 0.5)
-        eps = Tensor(shape=std.shape, init=Normal())
+        eps = Tensor(shape=std.shape, init=Normal(), dtype=mstype.float32)
         return matmul(eps, std) + (mu)
     else:
-        return Tensor(shape=mu.shape, init=Normal())
+        return Tensor(shape=mu.shape, init=Normal(), dtype=mstype.float32)
 
 
 def reparameterize_bern(x, training):
     if training:
-        eps = uniform.prob(Tensor(shape=x.shape, init=Zero()))
+        eps = uniform.prob(Tensor(shape=x.shape, init=Zero(), dtype=mstype.float32))
         return log(x + 1e-20) - log(-log(eps + 1e-20) + 1e-20)
     else: 
-        return bernoulli.prob(Tensor(shape=x.shape, init=Zero()))
+        return bernoulli.prob(Tensor(shape=x.shape, init=Zero(), dtype=mstype.float32))
 
 
 class ConvBlock2D(nn.SequentialCell):
     def __init__(self, in_channel, out_channel, ker_size, padding, stride, bn=True, act='lrelu'):
         super(ConvBlock2D, self).__init__()
         self.append(nn.Conv2d(in_channel, out_channel, kernel_size=ker_size,
-                              stride=stride, padding=padding, weight_init=Normal(0.0, 0.02),
+                              stride=stride, padding=padding, weight_init=Normal(0.02, 0.0),
                               pad_mode='pad', has_bias=True))
         if bn:
-            self.append(nn.BatchNorm2d(out_channel))
+            self.append(nn.BatchNorm2d(out_channel, gamma_init=Normal(0.02, 1.0)))
         if act is not None:
             self.append(get_activation(act))
 
@@ -81,20 +79,14 @@ class ConvBlock2DSN(nn.SequentialCell):
     def __init__(self, in_channel, out_channel, ker_size, padding, stride, bn=True, act='lrelu'):
         super(ConvBlock2DSN, self).__init__()
         if bn:
-            self.append(utils.SpectualNormConv2d(in_channel, out_channel, 
-                                                 kernel_size=ker_size,
-                                                 stride=stride, padding=padding,
-                                                 pad_mode='pad', has_bias=True))
-            self.append(nn.Conv2d(in_channel, out_channel, kernel_size=ker_size,
-                                  stride=stride, padding=padding, weight_init=Normal(0.0, 0.02),
-                                  pad_mode='pad', has_bias=True))
+            self.append(utils.SpectualNormConv2d(in_channel, out_channel, kernel_size=ker_size,
+                                                 stride=stride, weight_init=Normal(0.02, 0.0),
+                                                 padding=padding, pad_mode='pad', has_bias=True))
         else:
-            paddings = ((padding, padding), (padding, padding), 
-                        (padding, padding), (padding, padding))
-            self.append(nn.Pad(paddings=paddings, mode='REFLECT'))  # FIXME: reflect pad
+            # self.append(nn.Pad(paddings=padding, mode='REFLECT'))
             self.append(nn.Conv2d(in_channel, out_channel, kernel_size=ker_size, 
-                                  stride=stride,weight_init=Normal(0.0, 0.02),
-                                  pad_mode='valid', has_bias=True))
+                                  stride=stride, weight_init=Normal(0.02, 0.0),
+                                  pad_mode='same', has_bias=True))    # TODO: reflect+valid, padding=padding
         if act is not None:
             self.append(get_activation(act))
 
@@ -103,7 +95,7 @@ class FeatureExtractor(nn.SequentialCell):
     def __init__(self, in_channel, out_channel, ker_size, padding, stride, num_blocks=2, return_linear=False):
         super(FeatureExtractor, self).__init__()
         self.append(ConvBlock2DSN(in_channel, out_channel, ker_size, padding, stride))
-        for i in range(num_blocks - 1):
+        for _ in range(num_blocks - 1):
             self.append(ConvBlock2DSN(out_channel, out_channel, ker_size, padding, stride))
         if return_linear:
             self.append(ConvBlock2DSN(out_channel, out_channel, ker_size, 
@@ -129,7 +121,7 @@ class Encode2DVAE(nn.Cell):
         self.logvar = ConvBlock2D(opt.nfc, output_dim, opt.ker_size, 
                                   opt.ker_size // 2, 1, bn=False, act=None)
 
-    def forward(self, x):
+    def construct(self, x):
         features = self.features(x)
         mu = self.mu(features)
         logvar = self.logvar(features)
@@ -149,25 +141,23 @@ class Encode2DVAE_nb(nn.Cell):
 
         self.features = FeatureExtractor(opt.nc_im, opt.nfc, opt.ker_size, 
                                          opt.ker_size // 2, 1, num_blocks=num_blocks)
-        self.mu = nn.SequentialCell()
-        self.mu.append(ConvBlock2D(opt.nfc, output_dim, opt.ker_size, opt.ker_size // 2, 1, 
-                                   bn=False, act=None))
-        
-        self.logvar = nn.SequentialCell()
-        self.logvar.append(ConvBlock2D(opt.nfc, output_dim, opt.ker_size, opt.ker_size // 2, 1, 
-                                       bn=False, act=None))
-        # self.logvar.append(nn.AdaptiveAvgPool2D(1))
+        self.mu = ConvBlock2D(opt.nfc, output_dim, opt.ker_size, 
+                              opt.ker_size // 2, 1, bn=False, act=None)
+        self.logvar = ConvBlock2D(opt.nfc, output_dim, opt.ker_size, 
+                                  opt.ker_size // 2, 1, bn=False, act=None)
         
         self.bern = ConvBlock2D(opt.nfc, 1, opt.ker_size, opt.ker_size // 2, 1, bn=False, act=None)
 
-    def forward(self, x):
+    def construct(self, x):
         reduce_mean = ops.ReduceMean(keep_dims=True)
         
         features = self.features(x)
         bern = sigmoid(self.bern(features))
         features = bern * features
-        mu = reduce_mean(self.mu(features))
-        logvar = reduce_mean(self.logvar(features))
+        mu = reduce_mean(self.mu(features), 2)     # nn.AdaptiveAvgPool2D(1)
+        mu = reduce_mean(mu, 3)
+        logvar = reduce_mean(self.logvar(features), 2)     # nn.AdaptiveAvgPool2D(1)
+        logvar = reduce_mean(logvar, 3)
 
         return mu, logvar, bern
 
@@ -186,7 +176,7 @@ class Encode3DVAE1x1(nn.Cell):
         self.mu = ConvBlock2D(opt.nfc, output_dim, 1, 0, 1, bn=False, act=None)
         self.logvar = ConvBlock2D(opt.nfc, output_dim, 1, 0, 1, bn=False, act=None)
 
-    def forward(self, x):
+    def construct(self, x):
         features = self.features(x)
         mu = self.mu(features)
         logvar = self.logvar(features)
@@ -203,15 +193,15 @@ class WDiscriminator2D(nn.Cell):
         self.head = ConvBlock2DSN(opt.nc_im, N, opt.ker_size, 
                                   opt.ker_size // 2, stride=1, bn=True, act='lrelu')
         self.body = nn.SequentialCell()
-        for i in range(opt.num_layer):
+        for _ in range(opt.num_layer):
             block = ConvBlock2DSN(N, N, opt.ker_size, 
                                   opt.ker_size // 2, stride=1, bn=True, act='lrelu')
             self.body.append(block)
         self.tail = nn.Conv2d(N, 1, kernel_size=opt.ker_size, padding=1, stride=1, 
-                              weight_init=Normal(0.0, 0.02), 
+                              weight_init=Normal(0.02, 0.0), 
                               pad_mode='pad', has_bias=True)
 
-    def forward(self, x):
+    def construct(self, x):
         head = self.head(x)
         body = self.body(head)
         out = self.tail(body)
@@ -227,16 +217,16 @@ class GeneratorHPVAEGAN(nn.Cell):
         self.N = N
 
         self.encode = Encode2DVAE(opt, out_dim=opt.latent_dim, num_blocks=opt.enc_blocks)
-        self.decoder = nn.SequentialCell()
 
         # Normal Decoder
-        self.decoder.append(ConvBlock2D(opt.latent_dim, N, opt.ker_size, opt.padd_size, stride=1))
-        for i in range(opt.num_layer):
-            block = ConvBlock2D(N, N, opt.ker_size, opt.padd_size, stride=1)
-            self.decoder.append(block)
-        self.decoder.append(nn.Conv2d(N, opt.nc_im, opt.ker_size, 
-                                      stride=1, padding=opt.ker_size // 2, weight_init=Normal(0.0, 0.02),
-                                      pad_mode='pad', has_bias=True))
+        decoder = []
+        decoder.append(ConvBlock2D(opt.latent_dim, N, opt.ker_size, opt.padd_size, stride=1))
+        for _ in range(opt.num_layer):
+            decoder.append(ConvBlock2D(N, N, opt.ker_size, opt.padd_size, stride=1))
+        decoder.append(nn.Conv2d(N, opt.nc_im, opt.ker_size, stride=1, 
+                                 padding=opt.ker_size // 2, weight_init=Normal(0.02, 0.0),
+                                 pad_mode='pad', has_bias=True))
+        self.decoder = nn.SequentialCell(decoder)
 
         # 1x1 Decoder
         # self.decoder.append(ConvBlock2D(opt.latent_dim, N, 1, 0, stride=1))
@@ -252,19 +242,21 @@ class GeneratorHPVAEGAN(nn.Cell):
             _first_stage = nn.SequentialCell()
             _first_stage.append(ConvBlock2D(self.opt.nc_im, self.N, 
                                             self.opt.ker_size, self.opt.padd_size, stride=1))
-            for i in range(self.opt.num_layer):
+            for _ in range(self.opt.num_layer):
                 block = ConvBlock2D(self.N, self.N, self.opt.ker_size, self.opt.padd_size, stride=1)
                 _first_stage.append(block)
             _first_stage.append(nn.Conv2d(self.N, self.opt.nc_im, self.opt.ker_size, 
-                                          stride=1, padding=self.opt.ker_size // 2, weight_init=Normal(0.0, 0.02),
-                                          pad_mode='pad', has_bias=True))
+                                          stride=1, padding=self.opt.ker_size // 2, 
+                                          weight_init=Normal(0.02, 0.0), pad_mode='pad', has_bias=True))
             self.body.append(_first_stage)
         else:
             self.body.append(copy.deepcopy(self.body[-1]))
 
-    def forward(self, video, noise_amp, noise_init=None, sample_init=None, mode='rand'):
+    def construct(self, video, noise_amp, noise_init=None, sample_init=None, mode='rand'):
         if sample_init is not None:
-            assert len(self.body) > sample_init[0], "Strating index must be lower than # of body blocks"
+            # assert len(self.body) > sample_init[0], "Strating index must be lower than # of body blocks"
+            if len(self.body) <= sample_init[0]:    # FIXME: 不支持assert
+                exit(1)
 
         if noise_init is None:
             mu, logvar = self.encode(video)
@@ -313,17 +305,17 @@ class GeneratorVAE_nb(nn.Cell):
         self.N = N
 
         self.encode = Encode2DVAE_nb(opt, out_dim=opt.latent_dim, num_blocks=opt.enc_blocks)
-        self.decoder = nn.SequentialCell()
 
         # Normal Decoder
-        self.decoder.append(ConvBlock2D(opt.latent_dim, N, opt.ker_size, opt.padd_size, stride=1))
-        for i in range(opt.num_layer):
+        decoder = []    # FIXME: 重名问题
+        decoder.append(ConvBlock2D(opt.latent_dim, N, opt.ker_size, opt.padd_size, stride=1))
+        for _ in range(opt.num_layer):
             block = ConvBlock2D(N, N, opt.ker_size, opt.padd_size, stride=1)
-            self.decoder.append(block)
-        self.decoder.append(nn.Conv2d(N, opt.nc_im, opt.ker_size,
-                                      stride=1, padding=opt.ker_size // 2,
-                                      weight_init=Normal(0.0, 0.02),
-                                      pad_mode='pad', has_bias=True))
+            decoder.append(block)
+        decoder.append(nn.Conv2d(N, opt.nc_im, opt.ker_size, stride=1, 
+                                 padding=opt.ker_size // 2, weight_init=Normal(0.02, 0.0),
+                                 pad_mode='pad', has_bias=True))
+        self.decoder = nn.SequentialCell(decoder)
 
         self.body = nn.CellList([])
 
@@ -332,21 +324,23 @@ class GeneratorVAE_nb(nn.Cell):
             _first_stage = nn.SequentialCell()
             _first_stage.append(ConvBlock2D(self.opt.nc_im, self.N, 
                                             self.opt.ker_size, self.opt.padd_size, stride=1))
-            for i in range(self.opt.num_layer):
+            for _ in range(self.opt.num_layer):
                 block = ConvBlock2D(self.N, self.N, self.opt.ker_size, self.opt.padd_size, stride=1)
                 _first_stage.append(block)
             _first_stage.append(nn.Conv2d(self.N, self.opt.nc_im, self.opt.ker_size, 
                                           stride=1, padding=self.opt.ker_size // 2,
-                                          weight_init=Normal(0.0, 0.02),
+                                          weight_init=Normal(0.02, 0.0),
                                           pad_mode='pad', has_bias=True))
             self.body.append(_first_stage)
         else:
             self.body.append(copy.deepcopy(self.body[-1]))
 
-    def forward(self, video, noise_amp, 
-                noise_init_norm=None, noise_init_bern=None, sample_init=None, mode='rand'):
+    def construct(self, video, noise_amp, 
+                  noise_init_norm=None, noise_init_bern=None, sample_init=None, mode='rand'):
         if sample_init is not None:
-            assert len(self.body) > sample_init[0], "Strating index must be lower than # of body blocks"
+            # assert len(self.body) > sample_init[0], "Strating index must be lower than # of body blocks"
+            if len(self.body) <= sample_init[0]:    # FIXME: 不支持assert
+                exit(1)
 
         if noise_init_norm is None:
             mu, logvar, bern = self.encode(video)
@@ -398,8 +392,20 @@ if __name__ == '__main__':
             self.latent_dim = 128
             self.enc_blocks = 2
             self.padd_size = 1
+            self.image_path = '../data/imgs/air_balloons.jpg'
+            self.hflip = True
+            self.img_size = 256
+            self.data_rep = 1000
+            self.scale_factor = 0.75
+            self.stop_scale = 9
+            self.scale_idx = 0
+            self.vae_levels = 3
 
     opt = Opt()
+    opt.Noise_Amps = [1, 1, 1]
+    dataset = datasets.SingleImageDataset(opt)
     model = GeneratorVAE_nb(opt)
     model.init_next_stage()
-    print(model)
+    from mindspore.common.initializer import One
+    x = Tensor(shape=(64, 3, 3, 3), init=One(), dtype=mstype.float32)
+    print(model(x, opt.Noise_Amps))

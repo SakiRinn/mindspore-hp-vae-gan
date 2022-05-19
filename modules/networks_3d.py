@@ -3,12 +3,10 @@ import mindspore.nn as nn
 import mindspore.ops as ops
 from mindspore import Tensor
 from mindspore.common.initializer import Normal, Zero
+from mindspore import dtype as mstype
 import mindspore.nn.probability.distribution as msd
 from mindspore import nn
 import copy
-import numpy as np
-import sys
-sys.path.append("..")
 import utils
 
 matmul = ops.MatMul()
@@ -27,7 +25,7 @@ def get_activation(act):
         "lrelu": nn.LeakyReLU(),
         "elu": nn.ELU(),
         "prelu": nn.PReLU(),
-        "selu": ops.SeLU() 
+        # "selu": ops.SeLU() 
     }
     return activations[act]
 
@@ -35,18 +33,18 @@ def get_activation(act):
 def reparameterize(mu, logvar, training):
     if training:
         std = exp(logvar * 0.5)
-        eps = Tensor(shape=std.shape, init=Normal())
+        eps = Tensor(shape=std.shape, init=Normal(), dtype=mstype.float32)
         return matmul(eps, std) + (mu)
     else:
-        return Tensor(shape=mu.shape, init=Normal())
+        return Tensor(shape=mu.shape, init=Normal(), dtype=mstype.float32)
 
 
 def reparameterize_bern(x, training):
     if training:
-        eps = uniform.prob(Tensor(shape=x.shape, init=Zero()))
+        eps = uniform.prob(Tensor(shape=x.shape, init=Zero(), dtype=mstype.float32))
         return log(x + 1e-20) - log(-log(eps + 1e-20) + 1e-20)
     else: 
-        return bernoulli.prob(Tensor(shape=x.shape, init=Zero()))
+        return bernoulli.prob(Tensor(shape=x.shape, init=Zero(), dtype=mstype.float32))
 
 
 # Basic blocks
@@ -55,10 +53,10 @@ class ConvBlock3D(nn.SequentialCell):
     def __init__(self, in_channel, out_channel, ker_size, padding, stride, bn=True, act='lrelu'):
         super(ConvBlock3D, self).__init__()
         self.append(nn.Conv3d(in_channel, out_channel, kernel_size=ker_size,
-                              stride=stride, padding=padding, weight_init=Normal(0.0, 0.02),
+                              stride=stride, padding=padding, weight_init=Normal(0.02, 0.0),
                               pad_mode='pad', has_bias=True))
         if bn:
-            self.append(nn.BatchNorm3d(out_channel))
+            self.append(nn.BatchNorm3d(out_channel, gamma_init=Normal(0.02, 1.0)))
         if act is not None:
             self.append(get_activation(act))
 
@@ -67,18 +65,14 @@ class ConvBlock3DSN(nn.SequentialCell):
     def __init__(self, in_channel, out_channel, ker_size, padding, stride, bn=True, act='lrelu'):
         super(ConvBlock3DSN, self).__init__()
         if bn:
-            self.append(utils.SpectualNormConv2d(in_channel, out_channel, 
-                                                 kernel_size=ker_size,
-                                                 stride=stride, padding=padding,
-                                                 pad_mode='pad', has_bias=True))
-            self.append(nn.Conv3d(in_channel, out_channel, kernel_size=ker_size,
-                                  stride=stride, padding=padding, weight_init=Normal(0.0, 0.02),
-                                  pad_mode='pad', has_bias=True))
+            self.append(utils.SpectualNormConv2d(in_channel, out_channel, kernel_size=ker_size,
+                                                 stride=stride, padding=padding, weight_init=Normal(0.02, 0.0),
+                                                 pad_mode='pad', has_bias=True))    # FIXME: 3D谱归一化
         else:
             # self.append(nn.Pad(paddings=padding, mode='REFLECT'))
             self.append(nn.Conv3d(in_channel, out_channel, kernel_size=ker_size, 
-                                  stride=stride, weight_init=Normal(0.0, 0.02),
-                                  pad_mode='same', has_bias=False))    # TODO: reflect + valid
+                                  stride=stride, weight_init=Normal(0.02, 0.0),
+                                  pad_mode='same', has_bias=False))    # TODO: reflect+valid, padding=padding
         if act is not None:
             self.append(get_activation(act))
 
@@ -88,11 +82,10 @@ class FeatureExtractor(nn.SequentialCell):
                  num_blocks=2, return_linear=False):
         super(FeatureExtractor, self).__init__()
         self.append(ConvBlock3DSN(in_channel, out_channel, ker_size, padding, stride)),
-        for i in range(num_blocks - 1):
+        for _ in range(num_blocks - 1):
             self.append(ConvBlock3DSN(out_channel, out_channel, ker_size, padding, stride))
         if return_linear:
-            self.append(ConvBlock3DSN(out_channel, out_channel, ker_size, padding, stride, 
-                                      bn=False, act=None))
+            self.append(ConvBlock3DSN(out_channel, out_channel, ker_size, padding, stride, bn=False, act=None))
         else:
             self.append(ConvBlock3DSN(out_channel, out_channel, ker_size, padding, stride))
 
@@ -107,11 +100,14 @@ class Encode3DVAE(nn.Cell):
             assert type(out_dim) is int
             output_dim = out_dim
 
-        self.features = FeatureExtractor(opt.nc_im, opt.nfc, opt.ker_size, opt.ker_size // 2, 1, num_blocks=num_blocks)
-        self.mu = ConvBlock3D(opt.nfc, output_dim, opt.ker_size, opt.ker_size // 2, 1, bn=False, act=None)
-        self.logvar = ConvBlock3D(opt.nfc, output_dim, opt.ker_size, opt.ker_size // 2, 1, bn=False, act=None)
+        self.features = FeatureExtractor(opt.nc_im, opt.nfc, opt.ker_size, opt.ker_size // 2, 1,        
+                                         num_blocks=num_blocks)
+        self.mu = ConvBlock3D(opt.nfc, output_dim, opt.ker_size, 
+                              opt.ker_size // 2, 1, bn=False, act=None)
+        self.logvar = ConvBlock3D(opt.nfc, output_dim, opt.ker_size, 
+                                  opt.ker_size // 2, 1, bn=False, act=None)
 
-    def forward(self, x):
+    def construct(self, x):
         features = self.features(x)
         mu = self.mu(features)
         logvar = self.logvar(features)
@@ -129,26 +125,27 @@ class Encode3DVAE_nb(nn.Cell):
             assert type(out_dim) is int
             output_dim = out_dim
 
-        self.features = FeatureExtractor(opt.nc_im, opt.nfc, opt.ker_size, opt.ker_size // 2, 1, num_blocks=num_blocks)
-        
-        self.mu = nn.SequentialCell()
-        self.mu.append(ConvBlock3D(opt.nfc, output_dim, opt.ker_size, opt.ker_size // 2, 1, 
-                                   bn=False, act=None))
-        
-        self.logvar = nn.SequentialCell()
-        self.logvar.append(ConvBlock3D(opt.nfc, output_dim, opt.ker_size, opt.ker_size // 2, 1,
-                                       bn=False, act=None))
-        
+        self.features = FeatureExtractor(opt.nc_im, opt.nfc, opt.ker_size, 
+                                         opt.ker_size // 2, 1, num_blocks=num_blocks)
+        self.mu = ConvBlock3D(opt.nfc, output_dim, opt.ker_size, 
+                              opt.ker_size // 2, 1, bn=False, act=None)
+        self.logvar = ConvBlock3D(opt.nfc, output_dim, opt.ker_size, 
+                                  opt.ker_size // 2, 1, bn=False, act=None)
+    
         self.bern = ConvBlock3D(opt.nfc, 1, opt.ker_size, opt.ker_size // 2, 1, bn=False, act=None)
 
-    def forward(self, x):
+    def construct(self, x):
         reduce_mean = ops.ReduceMean(keep_dims=True)
         
         features = self.features(x)
         bern = sigmoid(self.bern(features))
         features = bern * features
-        mu = reduce_mean(self.mu(features))
-        logvar = reduce_mean(self.logvar(features))
+        mu = reduce_mean(self.mu(features), 2)     # nn.AdaptiveAvgPool3D(1)
+        mu = reduce_mean(mu, 3)
+        mu = reduce_mean(mu, 4)
+        logvar = reduce_mean(self.logvar(features), 2)     # nn.AdaptiveAvgPool3D(1)
+        logvar = reduce_mean(logvar, 3)
+        logvar = reduce_mean(logvar, 4)
 
         return mu, logvar, bern
 
@@ -167,7 +164,7 @@ class Encode3DVAE1x1(nn.Cell):
         self.mu = ConvBlock3D(opt.nfc, output_dim, 1, 0, 1, bn=False, act=None)
         self.logvar = ConvBlock3D(opt.nfc, output_dim, 1, 0, 1, bn=False, act=None)
 
-    def forward(self, x):
+    def construct(self, x):
         features = self.features(x)
         mu = self.mu(features)
         logvar = self.logvar(features)
@@ -182,16 +179,19 @@ class WDiscriminator3D(nn.Cell):
         self.opt = opt
         N = int(opt.nfc)
 
-        self.head = ConvBlock3DSN(opt.nc_im, N, opt.ker_size, opt.ker_size // 2, stride=1, 
-                                  bn=True, act='lrelu')
-        self.body = nn.SequentialCell()
-        for i in range(opt.num_layer):
-            block = ConvBlock3DSN(N, N, opt.ker_size, opt.ker_size // 2, stride=1, bn=True, act='lrelu')
-            self.body.append(block)
+        self.head = ConvBlock3DSN(opt.nc_im, N, opt.ker_size, opt.ker_size // 2, 
+                                  stride=1, bn=True, act='lrelu')
+        
+        body = []
+        for _ in range(opt.num_layer):
+            body.append(ConvBlock3DSN(N, N, opt.ker_size, opt.ker_size // 2, 
+                                      stride=1, bn=True, act='lrelu'))
+        self.body = nn.SequentialCell(body)
+        
         self.tail = nn.Conv3d(N, 1, kernel_size=opt.ker_size, padding=1, stride=1,
-                              weight_init=Normal(0.0, 0.02), pad_mode='pad', has_bias=True)
+                              weight_init=Normal(0.02, 0.0), pad_mode='pad', has_bias=True)
 
-    def forward(self, x):
+    def construct(self, x):
         head = self.head(x)
         body = self.body(head)
         out = self.tail(body)
@@ -204,20 +204,23 @@ class WDiscriminatorBaselines(nn.Cell):
 
         self.opt = opt
         N = int(opt.nfc)
-        self.p3d = (self.opt.num_layer + 2, self.opt.num_layer + 2,
-                    self.opt.num_layer + 2, self.opt.num_layer + 2,
-                    self.opt.num_layer + 2, self.opt.num_layer + 2)
+        self.p3d = ((self.opt.num_layer + 2, self.opt.num_layer + 2),
+                    (self.opt.num_layer + 2, self.opt.num_layer + 2),
+                    (self.opt.num_layer + 2, self.opt.num_layer + 2))
 
-        self.head = ConvBlock3D(opt.nc_im, N, opt.ker_size, opt.padd_size, stride=1, bn=False, act='lrelu')
-        self.body = nn.SequentialCell()
-        for i in range(opt.num_layer):
-            block = ConvBlock3D(N, N, opt.ker_size, opt.padd_size, stride=1, bn=True, act='lrelu')
-            self.body.append(block)
+        self.head = ConvBlock3D(opt.nc_im, N, opt.ker_size, opt.padd_size, 
+                                stride=1, bn=False, act='lrelu')
+        
+        body = []
+        for _ in range(opt.num_layer):
+            body.append(ConvBlock3D(N, N, opt.ker_size, opt.padd_size, 
+                                    stride=1, bn=True, act='lrelu'))
+        self.body = nn.SequentialCell(body)
 
         self.tail = nn.Conv3d(N, 1, kernel_size=opt.ker_size, padding=opt.padd_size, stride=1,
-                              weight_init=Normal(0.0, 0.02), pad_mode='pad', has_bias=True)
+                              weight_init=Normal(0.02, 0.0), pad_mode='pad', has_bias=True)
 
-    def forward(self, x):
+    def construct(self, x):
         pad_op = ops.Pad(self.p3d)
         x = pad_op(x)
 
@@ -234,32 +237,33 @@ class GeneratorCSG(nn.Cell):
         self.opt = opt
         N = int(opt.nfc)
 
-        self.p3d_once = (1, 1,
-                         1, 1,
-                         1, 1)
-        self.p3d = (self.opt.num_layer + 0, self.opt.num_layer + 0,
-                    self.opt.num_layer + 0, self.opt.num_layer + 0,
-                    self.opt.num_layer + 0, self.opt.num_layer + 0)
+        self.p3d_once = ((1, 1),
+                         (1, 1),
+                         (1, 1))
+        self.p3d = ((self.opt.num_layer + 0, self.opt.num_layer + 0),
+                    (self.opt.num_layer + 0, self.opt.num_layer + 0),
+                    (self.opt.num_layer + 0, self.opt.num_layer + 0))
 
         self.head = ConvBlock3D(opt.nc_im, N, opt.ker_size, padding=0, stride=1)
 
         self.body = nn.CellList([])
         _first_stage = nn.SequentialCell()
-        for i in range(opt.num_layer):
+        for _ in range(opt.num_layer):
             block = ConvBlock3D(N, N, opt.ker_size, padding=0, stride=1)
             _first_stage.append(block)
         self.body.append(_first_stage)
 
-        self.tail = nn.SequentialCell()
-        self.tail.append(nn.Conv3d(N, opt.nc_im, kernel_size=opt.ker_size, padding=0, stride=1,
-                                   weight_init=Normal(0.0, 0.02), pad_mode='pad', has_bias=True))
-        self.tail.append(nn.Tanh())
+        tail = []
+        tail.append(nn.Conv3d(N, opt.nc_im, kernel_size=opt.ker_size, padding=0, stride=1,
+                              weight_init=Normal(0.02, 0.0), pad_mode='pad', has_bias=True))
+        tail.append(nn.Tanh())
+        self.tail = nn.SequentialCell(tail)
 
 
     def init_next_stage(self):
         self.body.append(copy.deepcopy(self.body[-1]))
 
-    def forward(self, noise_init, noise_amp, mode='rand'):
+    def construct(self, noise_init, noise_amp, mode='rand'):
         pad_op1 = ops.Pad(self.p3d_once)
         x = self.head(pad_op1(noise_init))
 
@@ -294,26 +298,26 @@ class GeneratorSG(nn.Cell):
         self.opt = opt
         N = int(opt.nfc)
 
-        self.p3d = (self.opt.num_layer + 2, self.opt.num_layer + 2,
-                    self.opt.num_layer + 2, self.opt.num_layer + 2,
-                    self.opt.num_layer + 2, self.opt.num_layer + 2)
+        self.p3d = ((self.opt.num_layer + 2, self.opt.num_layer + 2),
+                    (self.opt.num_layer + 2, self.opt.num_layer + 2),
+                    (self.opt.num_layer + 2, self.opt.num_layer + 2))
 
         self.body = nn.CellList([])
 
         _first_stage = nn.SequentialCell()
         _first_stage.append(ConvBlock3D(opt.nc_im, N, opt.ker_size, padding=0, stride=1))
-        for i in range(opt.num_layer):
+        for _ in range(opt.num_layer):
             block = ConvBlock3D(N, N, opt.ker_size, padding=0, stride=1)
             _first_stage.append(block)
-        _first_stage.append(nn.Conv3d(N, opt.nc_im, kernel_size=opt.ker_size, padding=0, stride=1, 
-                                      weight_init=Normal(0.0, 0.02)))
+        _first_stage.append(nn.Conv3d(N, opt.nc_im, kernel_size=opt.ker_size, 
+                                      padding=0, stride=1, weight_init=Normal(0.02, 0.0)))
         self.body.append(_first_stage)
 
 
     def init_next_stage(self):
         self.body.append(copy.deepcopy(self.body[-1]))
 
-    def forward(self, noise_init, noise_amp, mode='rand'):
+    def construct(self, noise_init, noise_amp, mode='rand'):
         pad_op = ops.Pad(self.p3d)
         x_prev_out = self.body[0](pad_op(noise_init))
 
@@ -349,16 +353,15 @@ class GeneratorHPVAEGAN(nn.Cell):
         self.N = N
 
         self.encode = Encode3DVAE(opt, out_dim=opt.latent_dim, num_blocks=opt.enc_blocks)
-        self.decoder = nn.SequentialCell()
 
         # Normal Decoder
-        self.decoder.append(ConvBlock3D(opt.latent_dim, N, opt.ker_size, opt.padd_size, stride=1))
-        for i in range(opt.num_layer):
-            block = ConvBlock3D(N, N, opt.ker_size, opt.padd_size, stride=1)
-            self.decoder.append(block)
-        self.decoder.append(nn.Conv3d(N, opt.nc_im, opt.ker_size, 
-                                      stride=1, padding=opt.ker_size // 2, 
-                                      weight_init=Normal(0.0, 0.02), pad_mode='pad', has_bias=True))
+        decoder = []
+        decoder.append(ConvBlock3D(opt.latent_dim, N, opt.ker_size, opt.padd_size, stride=1))
+        for _ in range(opt.num_layer):
+            decoder.append(ConvBlock3D(N, N, opt.ker_size, opt.padd_size, stride=1))
+        decoder.append(nn.Conv3d(N, opt.nc_im, opt.ker_size, stride=1, padding=opt.ker_size // 2, 
+                                 weight_init=Normal(0.02, 0.0), pad_mode='pad', has_bias=True))
+        self.decoder = nn.SequentialCell(decoder)
 
         # 1x1 Decoder
         # self.decoder.append(ConvBlock3D(opt.latent_dim, N, 1, 0, stride=1))
@@ -374,19 +377,21 @@ class GeneratorHPVAEGAN(nn.Cell):
             _first_stage = nn.SequentialCell()
             _first_stage.append(ConvBlock3D(self.opt.nc_im, self.N, 
                                             self.opt.ker_size, self.opt.padd_size, stride=1))
-            for i in range(self.opt.num_layer):
+            for _ in range(self.opt.num_layer):
                 block = ConvBlock3D(self.N, self.N, self.opt.ker_size, self.opt.padd_size, stride=1)
                 _first_stage.append(block)
             _first_stage.append(nn.Conv3d(self.N, self.opt.nc_im, self.opt.ker_size, 
                                           stride=1, padding=self.opt.ker_size // 2, 
-                                          weight_init=Normal(0.0, 0.02), pad_mode='pad', has_bias=True))
+                                          weight_init=Normal(0.02, 0.0), pad_mode='pad', has_bias=True))
             self.body.append(_first_stage)
         else:
             self.body.append(copy.deepcopy(self.body[-1]))
 
-    def forward(self, video, noise_amp, noise_init=None, sample_init=None, mode='rand'):
+    def construct(self, video, noise_amp, noise_init=None, sample_init=None, mode='rand'):
         if sample_init is not None:
-            assert len(self.body) > sample_init[0], "Strating index must be lower than # of body blocks"
+            # assert len(self.body) > sample_init[0], "Strating index must be lower than # of body blocks"
+            if len(self.body) <= sample_init[0]:
+                exit(1)
 
         if noise_init is None:
             mu, logvar = self.encode(video)
@@ -435,16 +440,16 @@ class GeneratorVAE_nb(nn.Cell):
         self.N = N
 
         self.encode = Encode3DVAE_nb(opt, out_dim=opt.latent_dim, num_blocks=opt.enc_blocks)
-        self.decoder = nn.SequentialCell()
 
         # Normal Decoder
-        self.decoder.append(ConvBlock3D(opt.latent_dim, N, opt.ker_size, opt.padd_size, stride=1))
-        for i in range(opt.num_layer):
+        decoder = []
+        decoder.append(ConvBlock3D(opt.latent_dim, N, opt.ker_size, opt.padd_size, stride=1))
+        for _ in range(opt.num_layer):
             block = ConvBlock3D(N, N, opt.ker_size, opt.padd_size, stride=1)
-            self.decoder.append(block)
-        self.decoder.append(nn.Conv3d(N, opt.nc_im, opt.ker_size, 
-                                      stride=1, padding=opt.ker_size // 2, 
-                                      weight_init=Normal(0.0, 0.02), pad_mode='pad', has_bias=True))
+            decoder.append(block)
+        decoder.append(nn.Conv3d(N, opt.nc_im, opt.ker_size, stride=1, padding=opt.ker_size // 2, 
+                                 weight_init=Normal(0.02, 0.0), pad_mode='pad', has_bias=True))
+        self.decoder = nn.SequentialCell(decoder)
 
         self.body = nn.CellList([])
 
@@ -453,21 +458,23 @@ class GeneratorVAE_nb(nn.Cell):
             _first_stage = nn.SequentialCell()
             _first_stage.append(ConvBlock3D(self.opt.nc_im, self.N, 
                                             self.opt.ker_size, self.opt.padd_size, stride=1))
-            for i in range(self.opt.num_layer):
+            for _ in range(self.opt.num_layer):
                 block = ConvBlock3D(self.N, self.N, 
                                     self.opt.ker_size, self.opt.padd_size, stride=1)
                 _first_stage.append(block)
             _first_stage.append(nn.Conv3d(self.N, self.opt.nc_im, self.opt.ker_size, 
                                           stride=1, padding=self.opt.ker_size // 2, 
-                                          weight_init=Normal(0.0, 0.02), pad_mode='pad', has_bias=True))
+                                          weight_init=Normal(0.02, 0.0), pad_mode='pad', has_bias=True))
             self.body.append(_first_stage)
         else:
             self.body.append(copy.deepcopy(self.body[-1]))
 
-    def forward(self, video, noise_amp, 
-                noise_init_norm=None, noise_init_bern=None, sample_init=None, mode='rand'):
+    def construct(self, video, noise_amp, 
+                  noise_init_norm=None, noise_init_bern=None, sample_init=None, mode='rand'):
         if sample_init is not None:
-            assert len(self.body) > sample_init[0], "Strating index must be lower than # of body blocks"
+            # assert len(self.body) > sample_init[0], "Strating index must be lower than # of body blocks"
+            if len(self.body) <= sample_init[0]:
+                exit(1)
 
         if noise_init_norm is None:
             mu, logvar, bern = self.encode(video)
@@ -512,7 +519,6 @@ class GeneratorVAE_nb(nn.Cell):
 if __name__ == '__main__':
     class Opt:
         def __init__(self):
-            # Model
             self.nfc = 64
             self.nc_im = 3
             self.ker_size = 3
@@ -520,13 +526,20 @@ if __name__ == '__main__':
             self.latent_dim = 128
             self.enc_blocks = 2
             self.padd_size = 1
-            # Dataset
             self.image_path = '../data/imgs/air_balloons.jpg'
-            self.hflip = False
+            self.hflip = True
             self.img_size = 256
-    
+            self.data_rep = 1000
+            self.scale_factor = 0.75
+            self.stop_scale = 9
+            self.scale_idx = 0
+            self.vae_levels = 3
+
     opt = Opt()
-    x = np.ones([64, 3, 3, 3, 3])
-    model = Encode3DVAE_nb(opt)
-    # print(model(x)[0].shape, model(x)[1].shape, model(x)[2].shape)
-    print(model)
+    opt.Noise_Amps = [1, 1, 1]
+    dataset = datasets.SingleImageDataset(opt)
+    model = WDiscriminatorBaselines(opt)
+    # model.init_next_stage()
+    from mindspore.common.initializer import One
+    x = Tensor(shape=(64, 3, 3, 3, 3), init=One(), dtype=mstype.float32)
+    print(model(x))

@@ -4,9 +4,9 @@ import mindspore.dataset as ds
 from mindspore.dataset.vision.c_transforms import Normalize
 import numpy as np
 import cv2
-from generate_frames import video_to_frames
+from . import video_to_frames
 import logging
-from .. import utils
+import utils
 
 normalize = Normalize(mean=[0.5], std=[0.5])
 
@@ -79,7 +79,7 @@ class SingleVideoDataset(ds.Dataset):
         if hflip:
             frames_transformed = np.flip(frames_transformed, -1)
         # Normalize
-        for T in range(frames_transformed.shape[0]):    # TODO: normalize无法处理4维
+        for T in range(frames_transformed.shape[0]):
             frames_transformed[T] = normalize(frames_transformed[T])
         # Permute CTHW
         frames_transformed = frames_transformed.transpose(1, 0, 2, 3)

@@ -1,13 +1,7 @@
 ## 进度
 
-./datasets Tensor改numpy
+./datasets 已写完，已测试
 
-./modules 完成
+./modules 已写完，测试中（最后两个模型），差3D谱归一化
 
-./utils 完成
-
-train_image.py eval_image.py 进行中
-
-## 单元测试
-
-待进行
+./utils 差三线性插值

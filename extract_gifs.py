@@ -3,6 +3,7 @@ import mindspore
 from mindspore import Tensor
 from mindspore.common.initializer import One
 import mindspore.ops as ops
+from mindspore import dtype as mstype
 import numpy as np
 import moviepy.editor as mpy
 import imageio
@@ -53,7 +54,8 @@ def generate_gifs(opt):
         imageio.imwrite(os.path.join(exp_dir, opt.save_path, 'fake_unfold.png'), 
                         grid_image.data.numpy())
 
-        white_space = Tensor(shape=random_samples.shape, init=One())[:, :, :, :10] * 255
+        white_space = Tensor(shape=random_samples.shape, 
+                             init=One(), dtype=mstype.float32)[:, :, :, :10] * 255
 
         random_samples = random_samples.data.cpu().numpy()
         random_samples = (random_samples * 255).astype(np.uint8)
