@@ -346,7 +346,7 @@ if __name__ == '__main__':
     dataset = SingleImageDataset(opt)
     dataset = dataset.batch(opt.batch_size)
     dataset = dataset.shuffle(4)
-    data_loader = dataset.create_tuple_iterator()
+    data_loader = dataset.create_dict_iterator()
 
     if opt.stop_scale_time == -1:
         opt.stop_scale_time = opt.stop_scale
