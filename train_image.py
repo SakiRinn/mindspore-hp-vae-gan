@@ -10,6 +10,7 @@ import colorama
 import mindspore
 import mindspore.nn as nn
 import mindspore.ops as ops
+from mindspore.dataset import GeneratorDataset
 
 from modules import networks_2d
 from modules.losses import DWithLoss, GWithLoss
@@ -343,7 +344,8 @@ if __name__ == '__main__':
     opt.Noise_Amps = []
 
     # Dataset
-    dataset = SingleImageDataset(opt)
+    dataset_generator = SingleImageDataset(opt)
+    dataset = GeneratorDataset(dataset_generator, shuffle=True)
     dataset = dataset.batch(opt.batch_size)
     dataset = dataset.shuffle(4)
     data_loader = dataset.create_dict_iterator()

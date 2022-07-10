@@ -29,7 +29,7 @@ def get_activation(act):
         "lrelu": nn.LeakyReLU(),
         "elu": nn.ELU(),
         "prelu": nn.PReLU(),
-        # "selu": ops.SeLU() 
+        # "selu": ops.SeLU()
     }
     return activations[act]
 
@@ -47,7 +47,7 @@ def reparameterize_bern(x, training):
     if training:
         eps = uniform.prob(Tensor(shape=x.shape, init=Zero(), dtype=mstype.float32))
         return log(x + 1e-20) - log(-log(eps + 1e-20) + 1e-20)
-    else: 
+    else:
         return bernoulli.prob(Tensor(shape=x.shape, init=Zero(), dtype=mstype.float32))
 
 
@@ -74,7 +74,7 @@ class ConvBlock2DSN(nn.SequentialCell):
             paddings = ((0, 0), (0, 0),
                         (padding, padding), (padding, padding), (padding, padding))
             self.append(nn.Pad(paddings=paddings, mode='REFLECT'))
-            self.append(nn.Conv2d(in_channel, out_channel, kernel_size=ker_size, 
+            self.append(nn.Conv2d(in_channel, out_channel, kernel_size=ker_size,
                                   stride=stride, weight_init=Normal(0.02, 0.0),
                                   pad_mode='valid', has_bias=True))
         if act is not None:
@@ -88,7 +88,7 @@ class FeatureExtractor(nn.SequentialCell):
         for _ in range(num_blocks - 1):
             self.append(ConvBlock2DSN(out_channel, out_channel, ker_size, padding, stride))
         if return_linear:
-            self.append(ConvBlock2DSN(out_channel, out_channel, ker_size, 
+            self.append(ConvBlock2DSN(out_channel, out_channel, ker_size,
                                       padding, stride, bn=False, act=None))
         else:
             self.append(ConvBlock2DSN(out_channel, out_channel, ker_size, padding, stride))
@@ -106,9 +106,9 @@ class Encode2DVAE(nn.Cell):
 
         self.features = FeatureExtractor(opt.nc_im, opt.nfc, opt.ker_size,
                                          opt.ker_size // 2, 1, num_blocks=num_blocks)
-        self.mu = ConvBlock2D(opt.nfc, output_dim, opt.ker_size, 
+        self.mu = ConvBlock2D(opt.nfc, output_dim, opt.ker_size,
                               opt.ker_size // 2, 1, bn=False, act=None)
-        self.logvar = ConvBlock2D(opt.nfc, output_dim, opt.ker_size, 
+        self.logvar = ConvBlock2D(opt.nfc, output_dim, opt.ker_size,
                                   opt.ker_size // 2, 1, bn=False, act=None)
 
     def construct(self, x):
@@ -129,18 +129,18 @@ class Encode2DVAE_nb(nn.Cell):
             assert type(out_dim) is int
             output_dim = out_dim
 
-        self.features = FeatureExtractor(opt.nc_im, opt.nfc, opt.ker_size, 
+        self.features = FeatureExtractor(opt.nc_im, opt.nfc, opt.ker_size,
                                          opt.ker_size // 2, 1, num_blocks=num_blocks)
-        self.mu = ConvBlock2D(opt.nfc, output_dim, opt.ker_size, 
+        self.mu = ConvBlock2D(opt.nfc, output_dim, opt.ker_size,
                               opt.ker_size // 2, 1, bn=False, act=None)
-        self.logvar = ConvBlock2D(opt.nfc, output_dim, opt.ker_size, 
+        self.logvar = ConvBlock2D(opt.nfc, output_dim, opt.ker_size,
                                   opt.ker_size // 2, 1, bn=False, act=None)
-        
+
         self.bern = ConvBlock2D(opt.nfc, 1, opt.ker_size, opt.ker_size // 2, 1, bn=False, act=None)
 
     def construct(self, x):
         reduce_mean = ops.ReduceMean(keep_dims=True)
-        
+
         features = self.features(x)
         bern = sigmoid(self.bern(features))
         features = bern * features
@@ -180,15 +180,15 @@ class WDiscriminator2D(nn.Cell):
 
         self.opt = opt
         N = int(opt.nfc)
-        self.head = ConvBlock2DSN(opt.nc_im, N, opt.ker_size, 
+        self.head = ConvBlock2DSN(opt.nc_im, N, opt.ker_size,
                                   opt.ker_size // 2, stride=1, bn=True, act='lrelu')
         self.body = nn.SequentialCell()
         for _ in range(opt.num_layer):
-            block = ConvBlock2DSN(N, N, opt.ker_size, 
+            block = ConvBlock2DSN(N, N, opt.ker_size,
                                   opt.ker_size // 2, stride=1, bn=True, act='lrelu')
             self.body.append(block)
-        self.tail = nn.Conv2d(N, 1, kernel_size=opt.ker_size, padding=1, stride=1, 
-                              weight_init=Normal(0.02, 0.0), 
+        self.tail = nn.Conv2d(N, 1, kernel_size=opt.ker_size, padding=1, stride=1,
+                              weight_init=Normal(0.02, 0.0),
                               pad_mode='pad', has_bias=True)
 
     def construct(self, x):
@@ -213,7 +213,7 @@ class GeneratorHPVAEGAN(nn.Cell):
         decoder.append(ConvBlock2D(opt.latent_dim, N, opt.ker_size, opt.padd_size, stride=1))
         for _ in range(opt.num_layer):
             decoder.append(ConvBlock2D(N, N, opt.ker_size, opt.padd_size, stride=1))
-        decoder.append(nn.Conv2d(N, opt.nc_im, opt.ker_size, stride=1, 
+        decoder.append(nn.Conv2d(N, opt.nc_im, opt.ker_size, stride=1,
                                  padding=opt.ker_size // 2, weight_init=Normal(0.02, 0.0),
                                  pad_mode='pad', has_bias=True))
         self.decoder = nn.SequentialCell(decoder)
@@ -230,13 +230,13 @@ class GeneratorHPVAEGAN(nn.Cell):
     def init_next_stage(self):
         if len(self.body) == 0:
             _first_stage = nn.SequentialCell()
-            _first_stage.append(ConvBlock2D(self.opt.nc_im, self.N, 
+            _first_stage.append(ConvBlock2D(self.opt.nc_im, self.N,
                                             self.opt.ker_size, self.opt.padd_size, stride=1))
             for _ in range(self.opt.num_layer):
                 block = ConvBlock2D(self.N, self.N, self.opt.ker_size, self.opt.padd_size, stride=1)
                 _first_stage.append(block)
-            _first_stage.append(nn.Conv2d(self.N, self.opt.nc_im, self.opt.ker_size, 
-                                          stride=1, padding=self.opt.ker_size // 2, 
+            _first_stage.append(nn.Conv2d(self.N, self.opt.nc_im, self.opt.ker_size,
+                                          stride=1, padding=self.opt.ker_size // 2,
                                           weight_init=Normal(0.02, 0.0), pad_mode='pad', has_bias=True))
             self.body.append(_first_stage)
         else:
@@ -245,7 +245,7 @@ class GeneratorHPVAEGAN(nn.Cell):
     def construct(self, video, noise_amp, noise_init=None, sample_init=None, mode='rand'):
         if sample_init is not None:
             # assert len(self.body) > sample_init[0], "Strating index must be lower than # of body blocks"
-            if len(self.body) <= sample_init[0]:    # FIXME: 不支持assert
+            if len(self.body) <= sample_init[0]:
                 exit(1)
 
         mu, logvar = None, None
@@ -298,12 +298,12 @@ class GeneratorVAE_nb(nn.Cell):
         self.encode = Encode2DVAE_nb(opt, out_dim=opt.latent_dim, num_blocks=opt.enc_blocks)
 
         # Normal Decoder
-        decoder = []    # FIXME: 重名问题
+        decoder = []
         decoder.append(ConvBlock2D(opt.latent_dim, N, opt.ker_size, opt.padd_size, stride=1))
         for _ in range(opt.num_layer):
             block = ConvBlock2D(N, N, opt.ker_size, opt.padd_size, stride=1)
             decoder.append(block)
-        decoder.append(nn.Conv2d(N, opt.nc_im, opt.ker_size, stride=1, 
+        decoder.append(nn.Conv2d(N, opt.nc_im, opt.ker_size, stride=1,
                                  padding=opt.ker_size // 2, weight_init=Normal(0.02, 0.0),
                                  pad_mode='pad', has_bias=True))
         self.decoder = nn.SequentialCell(decoder)
@@ -313,12 +313,12 @@ class GeneratorVAE_nb(nn.Cell):
     def init_next_stage(self):
         if len(self.body) == 0:
             _first_stage = nn.SequentialCell()
-            _first_stage.append(ConvBlock2D(self.opt.nc_im, self.N, 
+            _first_stage.append(ConvBlock2D(self.opt.nc_im, self.N,
                                             self.opt.ker_size, self.opt.padd_size, stride=1))
             for _ in range(self.opt.num_layer):
                 block = ConvBlock2D(self.N, self.N, self.opt.ker_size, self.opt.padd_size, stride=1)
                 _first_stage.append(block)
-            _first_stage.append(nn.Conv2d(self.N, self.opt.nc_im, self.opt.ker_size, 
+            _first_stage.append(nn.Conv2d(self.N, self.opt.nc_im, self.opt.ker_size,
                                           stride=1, padding=self.opt.ker_size // 2,
                                           weight_init=Normal(0.02, 0.0),
                                           pad_mode='pad', has_bias=True))
@@ -326,11 +326,11 @@ class GeneratorVAE_nb(nn.Cell):
         else:
             self.body.append(copy.deepcopy(self.body[-1]))
 
-    def construct(self, video, noise_amp, 
+    def construct(self, video, noise_amp,
                   noise_init_norm=None, noise_init_bern=None, sample_init=None, mode='rand'):
         if sample_init is not None:
             # assert len(self.body) > sample_init[0], "Strating index must be lower than # of body blocks"
-            if len(self.body) <= sample_init[0]:    # FIXME: 不支持assert
+            if len(self.body) <= sample_init[0]:
                 exit(1)
 
         if noise_init_norm is None:

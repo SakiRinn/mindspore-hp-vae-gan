@@ -103,6 +103,7 @@ if __name__ == '__main__':
     opt = Opt()
     # 实例化数据集类
     dataset_generator = SingleImageDataset(opt)
+    dataset = ds.GeneratorDataset(dataset_generator)
+    data_loader = dataset.create_tuple_iterator()
     # 打印数据条数
-    print(dataset_generator[0])
-    print(dataset_generator[0].shape)
+    print(next(data_loader))
