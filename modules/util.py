@@ -20,7 +20,7 @@ class GradNetWrtX(nn.Cell):
 
 def calc_gradient_penalty(netD, real_data, fake_data, LAMBDA=1):
     alpha = Tensor(shape=(1, 1), init=Normal(), dtype=mstype.float32)
-    alpha = alpha.expand_as(Tensor(shape=(real_data.size()), 
+    alpha = alpha.expand_as(Tensor(shape=(real_data.size()),
                                    init=One(), dtype=mstype.float32))
 
     interpolates = (alpha * real_data + ((1 - alpha) * fake_data))
@@ -29,6 +29,6 @@ def calc_gradient_penalty(netD, real_data, fake_data, LAMBDA=1):
     #                                grad_outputs=torch.ones(disc_interpolates.size()).to(device),
     #                                create_graph=True, retain_graph=True, only_inputs=True)[0]
     gradients = GradNetWrtX(netD)(interpolates)
-    
+
     gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean() * LAMBDA
     return gradient_penalty

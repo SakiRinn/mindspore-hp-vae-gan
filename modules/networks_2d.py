@@ -248,6 +248,7 @@ class GeneratorHPVAEGAN(nn.Cell):
             if len(self.body) <= sample_init[0]:    # FIXME: 不支持assert
                 exit(1)
 
+        mu, logvar = None, None
         if noise_init is None:
             mu, logvar = self.encode(video)
             z_vae = reparameterize(mu, logvar, self.training)
