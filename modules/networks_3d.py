@@ -400,7 +400,6 @@ class GeneratorHPVAEGAN(nn.Cell):
 
     def construct(self, video, noise_amp, noise_init=None, sample_init=None, mode='rand'):
         if sample_init is not None:
-            # assert len(self.body) > sample_init[0], "Strating index must be lower than # of body blocks"
             if len(self.body) <= sample_init[0]:
                 exit(1)
 
@@ -483,7 +482,6 @@ class GeneratorVAE_nb(nn.Cell):
     def construct(self, video, noise_amp,
                   noise_init_norm=None, noise_init_bern=None, sample_init=None, mode='rand'):
         if sample_init is not None:
-            # assert len(self.body) > sample_init[0], "Strating index must be lower than # of body blocks"
             if len(self.body) <= sample_init[0]:
                 exit(1)
 

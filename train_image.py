@@ -2,19 +2,20 @@ import argparse
 import utils
 import random
 import os
+import colorama
+import logging
 
 from utils import logger, tools
-import logging
-import colorama
+from modules import networks_2d
+from modules.losses import DWithLoss, GWithLoss
+from modules.optimizers import ClippedAdam
+from datasets import SingleImageDataset
 
 import mindspore
 import mindspore.nn as nn
 import mindspore.ops as ops
 from mindspore.dataset import GeneratorDataset
 
-from modules import networks_2d
-from modules.losses import DWithLoss, GWithLoss
-from datasets.image import SingleImageDataset
 
 clear = colorama.Style.RESET_ALL
 blue = colorama.Fore.CYAN + colorama.Style.BRIGHT
@@ -35,7 +36,7 @@ def train(opt :argparse.Namespace, netG):
         # Current discriminator
         D_curr = getattr(networks_2d, opt.discriminator)(opt)
 
-        # load parameters for discriminator
+        # Load parameters for discriminator
         if (opt.netG != '') and (opt.resumed_idx == opt.scale_idx):
             D_curr.load_param_into_net(
                 mindspore.load_checkpoint('{}/netD_{}.ckpt'\
@@ -97,7 +98,7 @@ def train(opt :argparse.Namespace, netG):
     # Current generator
     G_curr = netG
     # Current optimizer for generator
-    optimizerG = nn.Adam(parameter_list, opt.lr_g, beta1=opt.beta1, beta2=0.999)
+    optimizerG = ClippedAdam(opt, parameter_list, opt.lr_g, beta1=opt.beta1, beta2=0.999)
 
 
     ## Train-one-step cell
@@ -174,10 +175,9 @@ def train(opt :argparse.Namespace, netG):
             fake, _ = G_curr(noise_init, opt.Noise_Amps, noise_init=noise_init, mode="rand")
             D_train(real, fake)
 
-            # (3) Update generator: maximize D(G(z))
+            # (3) Update generator: maximize D(G(z)) (After grad clipping)
             G_loss.VAEMode(False)
             G_train(real, real_zero, fake, generated, generated_vae, mu, logvar)
-            # torch.nn.utils.clip_grad_norm_(G_curr.get_parameters(), opt.grad_clip)    # FIXME: 梯度裁剪
 
 
         ## Update progress bar
@@ -187,7 +187,7 @@ def train(opt :argparse.Namespace, netG):
         ))
 
 
-        ## Virsualize with tensorboard
+        ## Virsualize with Tensorboard
         # if opt.visualize:
         #     opt.summary.add_scalar('Video/Scale {}/noise_amp'.format(opt.scale_idx), opt.noise_amp, iteration)
         #     if opt.vae_levels >= opt.scale_idx + 1:
@@ -236,21 +236,21 @@ def train(opt :argparse.Namespace, netG):
         opt.saver.save_checkpoint({
             'scale': opt.scale_idx,
             'parameters_dict': D_curr.module.parameters_dict()
-                          if opt.device != 'CPU' else D_curr.parameters_dictt(),
+                          if opt.device != 'CPU' else D_curr.parameters_dict(),
             'optimizer': optimizerD.parameters_dict(),
         }, 'netD_{}.ckpt'.format(opt.scale_idx))
 
 
 if __name__ == '__main__':
-    ### Parser ###
+    ## Parser
     parser = argparse.ArgumentParser()
 
-    # load, input, save configurations:
+    # Load, input, save configurations
     parser.add_argument('--netG', default='', help='path to netG (to continue training)')
     parser.add_argument('--netD', default='', help='path to netD (to continue training)')
     parser.add_argument('--manualSeed', type=int, help='manual seed')
 
-    # networks hyper parameters:
+    # Networks hyper parameters
     parser.add_argument('--nc-im', type=int, default=3, help='# channels')
     parser.add_argument('--nfc', type=int, default=64, help='model basic # channels')
     parser.add_argument('--latent-dim', type=int, default=128, help='Latent dim size')
@@ -263,13 +263,13 @@ if __name__ == '__main__':
     parser.add_argument('--generator', type=str, default='GeneratorHPVAEGAN', help='generator model')
     parser.add_argument('--discriminator', type=str, default='WDiscriminator2D', help='discriminator model')
 
-    # pyramid parameters:
+    # Pyramid parameters
     parser.add_argument('--scale-factor', type=float, default=0.75, help='pyramid scale factor')
     parser.add_argument('--noise_amp', type=float, default=0.1, help='addative noise cont weight')
     parser.add_argument('--min-size', type=int, default=32, help='image minimal size at the coarser scale')
     parser.add_argument('--max-size', type=int, default=256, help='image minimal size at the coarser scale')
 
-    # optimization hyper parameters:
+    # Optimization hyper parameters
     parser.add_argument('--niter', type=int, default=5000, help='number of iterations to train per scale')
     parser.add_argument('--lr-g', type=float, default=0.0005, help='learning rate, default=0.0005')
     parser.add_argument('--lr-d', type=float, default=0.0005, help='learning rate, default=0.0005')
@@ -291,7 +291,7 @@ if __name__ == '__main__':
     parser.add_argument('--stop-scale-time', type=int, default=-1)
     parser.add_argument('--data-rep', type=int, default=1000, help='data repetition')
 
-    # main arguments
+    # Main arguments
     parser.add_argument('--checkname', type=str, default='DEBUG', help='check name')
     parser.add_argument('--mode', default='train', help='task to be done')
     parser.add_argument('--batch-size', type=int, default=2, help='batch size')
@@ -305,7 +305,6 @@ if __name__ == '__main__':
 
     assert opt.vae_levels > 0
     assert opt.disc_loss_weight > 0
-
     if opt.data_rep < opt.batch_size:
         opt.data_rep = opt.batch_size
 
@@ -357,6 +356,7 @@ if __name__ == '__main__':
     opt.dataset = dataset
     opt.data_loader = data_loader
 
+
     ## Load
     with open(os.path.join(opt.saver.experiment_dir, 'args.txt'), 'w') as args_file:
         for argument, value in sorted(vars(opt).items()):
@@ -378,9 +378,10 @@ if __name__ == '__main__':
             logging.info("{}Iterations     :{} {}{}".format(blue, clear, opt.niter, clear))
             logging.info("{}Rec. Weight    :{} {}{}".format(blue, clear, opt.rec_weight, clear))
 
-    # Current networks
+
+    ## Current networks
     assert hasattr(networks_2d, opt.generator)
-    netG = getattr(networks_2d, opt.generator)(opt) #.to(opt.device)
+    netG = getattr(networks_2d, opt.generator)(opt)
 
     if opt.netG != '':
         if not os.path.isfile(opt.netG):
@@ -392,7 +393,7 @@ if __name__ == '__main__':
         for _ in range(opt.scale_idx):
             netG.init_next_stage()
         netG.load_param_into_net(checkpoint['state_dict'])
-        # NoiseAmp
+        # Noise Amp
         opt.Noise_Amps = mindspore.load_checkpoint(os.path.join(opt.resume_dir, 'Noise_Amps.ckpt'))['data']
     else:
         opt.resumed_idx = -1

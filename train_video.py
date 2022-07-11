@@ -2,19 +2,22 @@ import argparse
 import utils
 import random
 import os
+import colorama
+import logging
 
 from utils import logger, tools
-import logging
-import colorama
-
-import torch.nn.functional as F
-from torch.utils.data import DataLoader
-import torch.optim as optim
-
 from modules import networks_3d
-from modules.losses import kl_criterion
-from modules.util import *
+from modules.losses import DWithLoss, GWithLoss
+from modules.optimizers import ClippedAdam
 from datasets import SingleVideoDataset
+
+import mindspore
+import mindspore.nn as nn
+import mindspore.ops as ops
+from mindspore.dataset import GeneratorDataset
+
+cat = ops.Concat()
+RMSELoss = nn.RMSELoss()
 
 clear = colorama.Style.RESET_ALL
 blue = colorama.Fore.CYAN + colorama.Style.BRIGHT
@@ -23,78 +26,107 @@ magenta = colorama.Fore.MAGENTA + colorama.Style.BRIGHT
 
 
 def train(opt, netG):
-    # Re-generate dataset frames
+    ############
+    ### INIT ###
+    ############
+
+    ## Re-generate dataset frames
     fps, td, fps_index = utils.get_fps_td_by_index(opt.scale_idx, opt)
     opt.fps = fps
     opt.td = td
     opt.fps_index = fps_index
 
+    ## Log
     with logger.LoggingBlock("Updating dataset", emph=True):
         logging.info("{}FPS :{} {}{}".format(green, clear, opt.fps, clear))
         logging.info("{}Time-Depth :{} {}{}".format(green, clear, opt.td, clear))
         logging.info("{}Sampling-Ratio :{} {}{}".format(green, clear, opt.sampling_rates[opt.fps_index], clear))
         opt.dataset.generate_frames(opt.scale_idx)
 
-    # Initialize noise
+    ## Noise
     if not hasattr(opt, 'Z_init_size'):
         initial_size = utils.get_scales_by_index(0, opt.scale_factor, opt.stop_scale, opt.img_size)
         initial_size = [int(initial_size * opt.ar), initial_size]
         opt.Z_init_size = [opt.batch_size, opt.latent_dim, opt.td, *initial_size]
 
+
+    ## Discriminator
     if opt.vae_levels < opt.scale_idx + 1:
-        D_curr = getattr(networks_3d, opt.discriminator)(opt).to(opt.device)
+        # Current discriminator
+        D_curr = getattr(networks_3d, opt.discriminator)(opt)
 
+        # load parameters for discriminator
         if (opt.netG != '') and (opt.resumed_idx == opt.scale_idx):
-            D_curr.load_state_dict(
-                torch.load('{}/netD_{}.pth'.format(opt.resume_dir, opt.scale_idx - 1))['state_dict'])
+            D_curr.load_param_into_net(
+                mindspore.load_checkpoint('{}/netD_{}.ckpt'\
+                                          .format(opt.resume_dir, opt.scale_idx - 1))['state_dict']
+            )
         elif opt.vae_levels < opt.scale_idx:
-            D_curr.load_state_dict(
-                torch.load('{}/netD_{}.pth'.format(opt.saver.experiment_dir, opt.scale_idx - 1))['state_dict'])
+            D_curr.load_param_into_net(
+                mindspore.load_checkpoint('{}/netD_{}.ckpt'\
+                                          .format(opt.saver.experiment_dir, opt.scale_idx - 1))['state_dict']
+            )
 
-        # Current optimizers
-        optimizerD = optim.Adam(D_curr.parameters(), lr=opt.lr_d, betas=(opt.beta1, 0.999))
+        # Current optimizer for discriminator
+        optimizerD = nn.Adam(D_curr.get_parameters(), opt.lr_d, beta1=opt.beta1, beta2=0.999)
 
+
+    ## Generator
     parameter_list = []
-    # Generator Adversary
+
     if not opt.train_all:
+        # (1) train all
         if opt.vae_levels < opt.scale_idx + 1:
             train_depth = min(opt.train_depth, len(netG.body) - opt.vae_levels + 1)
             parameter_list += [
-                {"params": block.parameters(),
+                {"params": block.get_parameters(),
                  "lr": opt.lr_g * (opt.lr_scale ** (len(netG.body[-train_depth:]) - 1 - idx))}
                 for idx, block in enumerate(netG.body[-train_depth:])]
         else:
-            # VAE
-            parameter_list += [{"params": netG.encode.parameters(), "lr": opt.lr_g * (opt.lr_scale ** opt.scale_idx)},
-                               {"params": netG.decoder.parameters(), "lr": opt.lr_g * (opt.lr_scale ** opt.scale_idx)}]
+            parameter_list += [{"params": netG.encode.get_parameters(),
+                                "lr": opt.lr_g * (opt.lr_scale ** opt.scale_idx)},
+                               {"params": netG.decoder.get_parameters(),
+                                "lr": opt.lr_g * (opt.lr_scale ** opt.scale_idx)}
+            ]
             parameter_list += [
-                {"params": block.parameters(),
+                {"params": block.get_parameters(),
                  "lr": opt.lr_g * (opt.lr_scale ** (len(netG.body[-opt.train_depth:]) - 1 - idx))}
-                for idx, block in enumerate(netG.body[-opt.train_depth:])]
+                for idx, block in enumerate(netG.body[-opt.train_depth:])
+            ]
     else:
+        # (2) NOT train all
         if len(netG.body) < opt.train_depth:
-            parameter_list += [{"params": netG.encode.parameters(), "lr": opt.lr_g * (opt.lr_scale ** opt.scale_idx)},
-                               {"params": netG.decoder.parameters(), "lr": opt.lr_g * (opt.lr_scale ** opt.scale_idx)}]
+            parameter_list += [{"params": netG.encode.get_parameters(),
+                                "lr": opt.lr_g * (opt.lr_scale ** opt.scale_idx)},
+                               {"params": netG.decoder.get_parameters(),
+                                "lr": opt.lr_g * (opt.lr_scale ** opt.scale_idx)}
+            ]
             parameter_list += [
-                {"params": block.parameters(),
+                {"params": block.get_parameters(),
                  "lr": opt.lr_g * (opt.lr_scale ** (len(netG.body) - 1 - idx))}
-                for idx, block in enumerate(netG.body)]
+                for idx, block in enumerate(netG.body)
+            ]
         else:
             parameter_list += [
-                {"params": block.parameters(),
+                {"params": block.get_parameters(),
                  "lr": opt.lr_g * (opt.lr_scale ** (len(netG.body[-opt.train_depth:]) - 1 - idx))}
-                for idx, block in enumerate(netG.body[-opt.train_depth:])]
+                for idx, block in enumerate(netG.body[-opt.train_depth:])
+            ]
 
-    optimizerG = optim.Adam(parameter_list, lr=opt.lr_g, betas=(opt.beta1, 0.999))
+    # Current generator
+    G_curr = netG
+    # Current optimizer for generator
+    optimizerG = ClippedAdam(opt, parameter_list, opt.lr_g, beta1=opt.beta1, beta2=0.999)
 
-    # Parallel
-    if opt.device == 'cuda':
-        G_curr = torch.nn.DataParallel(netG)
-        if opt.vae_levels < opt.scale_idx + 1:
-            D_curr = torch.nn.DataParallel(D_curr)
-    else:
-        G_curr = netG
 
+    ## Train-one-step cell
+    D_loss = DWithLoss(opt, D_curr, G_curr)
+    G_loss = GWithLoss(opt, G_curr)
+    D_train = nn.TrainOneStepCell(D_loss, optimizerD)
+    G_train = nn.TrainOneStepCell(G_loss, optimizerG)
+
+
+    ## Progress bar
     progressbar_args = {
         "iterable": range(opt.niter),
         "desc": "Training scale [{}/{}]".format(opt.scale_idx + 1, opt.stop_scale + 1),
@@ -105,10 +137,14 @@ def train(opt, netG):
         "postfix": True
     }
     epoch_iterator = tools.create_progressbar(**progressbar_args)
+    iterator = iter(opt.data_loader)
 
-    iterator = iter(data_loader)
 
+    #############
+    ### TRAIN ###
+    #############
     for iteration in epoch_iterator:
+        ## Initialize
         try:
             data = next(iterator)
         except StopIteration:
@@ -117,156 +153,118 @@ def train(opt, netG):
 
         if opt.scale_idx > 0:
             real, real_zero = data
-            real = real.to(opt.device)
-            real_zero = real_zero.to(opt.device)
         else:
-            real = data.to(opt.device)
+            real = data
             real_zero = real
 
-        noise_init = utils.generate_noise(size=opt.Z_init_size, device=opt.device)
+        noise_init = utils.generate_noise(size=opt.Z_init_size)
 
-        ############################
-        # calculate noise_amp
-        ###########################
+
+        ## Calculate noise_amp (First iteration)
         if iteration == 0:
             if opt.const_amp:
                 opt.Noise_Amps.append(1)
             else:
-                with torch.no_grad():
-                    if opt.scale_idx == 0:
-                        opt.noise_amp = 1
-                        opt.Noise_Amps.append(opt.noise_amp)
-                    else:
-                        opt.Noise_Amps.append(0)
-                        z_reconstruction, _, _ = G_curr(real_zero, opt.Noise_Amps, mode="rec")
+                if opt.scale_idx == 0:
+                    opt.noise_amp = 1
+                    opt.Noise_Amps.append(opt.noise_amp)
+                else:
+                    opt.Noise_Amps.append(0)
+                    z_reconstruction, _, _ = G_curr(real_zero, opt.Noise_Amps, mode="rec")
+                    RMSE = RMSELoss(real, z_reconstruction)
+                    RMSE = ops.stop_gradient(RMSE)
 
-                        RMSE = torch.sqrt(F.mse_loss(real, z_reconstruction))
-                        opt.noise_amp = opt.noise_amp_init * RMSE.item() / opt.batch_size
-                        opt.Noise_Amps[-1] = opt.noise_amp
+                    opt.noise_amp = opt.noise_amp_init * RMSE.item() / opt.batch_size
+                    opt.Noise_Amps[-1] = opt.noise_amp
 
-        ############################
-        # (1) Update VAE network
-        ###########################
-        total_loss = 0
 
+        ## Update parameters
         generated, generated_vae, (mu, logvar) = G_curr(real_zero, opt.Noise_Amps, mode="rec")
-
         if opt.vae_levels >= opt.scale_idx + 1:
-            rec_vae_loss = opt.rec_loss(generated, real) + opt.rec_loss(generated_vae, real_zero)
-            kl_loss = kl_criterion(mu, logvar)
-            vae_loss = opt.rec_weight * rec_vae_loss + opt.kl_weight * kl_loss
-
-            total_loss += vae_loss
+            # (1) Update VAE network
+            G_loss.VAEMode(True)
+            G_train(real, real_zero, fake, generated, generated_vae, mu, logvar)
         else:
-            ############################
-            # (2) Update D network: maximize D(x) + D(G(z))
-            ###########################
-            # train with real
-            #################
-
-            # Train 3D Discriminator
-            D_curr.zero_grad()
-            output = D_curr(real)
-            errD_real = -output.mean()
-
-            # train with fake
-            #################
+            # (2) Update distriminator: maximize D(x) + D(G(z))
             fake, _ = G_curr(noise_init, opt.Noise_Amps, noise_init=noise_init, mode="rand")
+            D_train(real, fake)
 
-            # Train 3D Discriminator
-            output = D_curr(fake.detach())
-            errD_fake = output.mean()
+            # (3) Update generator: maximize D(G(z)) (After grad clipping)
+            G_loss.VAEMode(False)
+            G_train(real, real_zero, fake, generated, generated_vae, mu, logvar)
 
-            gradient_penalty = calc_gradient_penalty(D_curr, real, fake, opt.lambda_grad, opt.device)
-            errD_total = errD_real + errD_fake + gradient_penalty
-            errD_total.backward()
-            optimizerD.step()
 
-            ############################
-            # (3) Update G network: maximize D(G(z))
-            ###########################
-            errG_total = 0
-            rec_loss = opt.rec_loss(generated, real)
-            errG_total += opt.rec_weight * rec_loss
-
-            # Train with 3D Discriminator
-            output = D_curr(fake)
-            errG = -output.mean() * opt.disc_loss_weight
-            errG_total += errG
-
-            total_loss += errG_total
-
-        G_curr.zero_grad()
-        total_loss.backward()
-        torch.nn.utils.clip_grad_norm_(G_curr.parameters(), opt.grad_clip)
-        optimizerG.step()
-
-        # Update progress bar
+        ## Update progress bar
         epoch_iterator.set_description('Scale [{}/{}], Iteration [{}/{}]'.format(
             opt.scale_idx + 1, opt.stop_scale + 1,
             iteration + 1, opt.niter,
         ))
 
-        if opt.visualize:
-            # Tensorboard
-            opt.summary.add_scalar('Video/Scale {}/noise_amp'.format(opt.scale_idx), opt.noise_amp, iteration)
-            if opt.vae_levels >= opt.scale_idx + 1:
-                opt.summary.add_scalar('Video/Scale {}/KLD'.format(opt.scale_idx), kl_loss.item(), iteration)
-            else:
-                opt.summary.add_scalar('Video/Scale {}/rec loss'.format(opt.scale_idx), rec_loss.item(), iteration)
-            opt.summary.add_scalar('Video/Scale {}/noise_amp'.format(opt.scale_idx), opt.noise_amp, iteration)
-            if opt.vae_levels < opt.scale_idx + 1:
-                opt.summary.add_scalar('Video/Scale {}/errG'.format(opt.scale_idx), errG.item(), iteration)
-                opt.summary.add_scalar('Video/Scale {}/errD_fake'.format(opt.scale_idx), errD_fake.item(), iteration)
-                opt.summary.add_scalar('Video/Scale {}/errD_real'.format(opt.scale_idx), errD_real.item(), iteration)
-            else:
-                opt.summary.add_scalar('Video/Scale {}/Rec VAE'.format(opt.scale_idx), rec_vae_loss.item(), iteration)
 
-            if iteration % opt.print_interval == 0:
-                with torch.no_grad():
-                    fake_var = []
-                    fake_vae_var = []
-                    for _ in range(3):
-                        noise_init = utils.generate_noise(ref=noise_init)
-                        fake, fake_vae = G_curr(noise_init, opt.Noise_Amps, noise_init=noise_init, mode="rand")
-                        fake_var.append(fake)
-                        fake_vae_var.append(fake_vae)
-                    fake_var = torch.cat(fake_var, dim=0)
-                    fake_vae_var = torch.cat(fake_vae_var, dim=0)
+        ## Virsualize with tensorboard
+        # if opt.visualize:
+        #     # Tensorboard
+        #     opt.summary.add_scalar('Video/Scale {}/noise_amp'.format(opt.scale_idx), opt.noise_amp, iteration)
+        #     if opt.vae_levels >= opt.scale_idx + 1:
+        #         opt.summary.add_scalar('Video/Scale {}/KLD'.format(opt.scale_idx), kl_loss.item(), iteration)
+        #     else:
+        #         opt.summary.add_scalar('Video/Scale {}/rec loss'.format(opt.scale_idx), rec_loss.item(), iteration)
+        #     opt.summary.add_scalar('Video/Scale {}/noise_amp'.format(opt.scale_idx), opt.noise_amp, iteration)
+        #     if opt.vae_levels < opt.scale_idx + 1:
+        #         opt.summary.add_scalar('Video/Scale {}/errG'.format(opt.scale_idx), errG.item(), iteration)
+        #         opt.summary.add_scalar('Video/Scale {}/errD_fake'.format(opt.scale_idx), errD_fake.item(), iteration)
+        #         opt.summary.add_scalar('Video/Scale {}/errD_real'.format(opt.scale_idx), errD_real.item(), iteration)
+        #     else:
+        #         opt.summary.add_scalar('Video/Scale {}/Rec VAE'.format(opt.scale_idx), rec_vae_loss.item(), iteration)
 
-                opt.summary.visualize_video(opt, iteration, real, 'Real')
-                opt.summary.visualize_video(opt, iteration, generated, 'Generated')
-                opt.summary.visualize_video(opt, iteration, generated_vae, 'Generated VAE')
-                opt.summary.visualize_video(opt, iteration, fake_var, 'Fake var')
-                opt.summary.visualize_video(opt, iteration, fake_vae_var, 'Fake VAE var')
+        #     if iteration % opt.print_interval == 0:
+        #         with torch.no_grad():
+        #             fake_var = []
+        #             fake_vae_var = []
+        #             for _ in range(3):
+        #                 noise_init = utils.generate_noise(ref=noise_init)
+        #                 fake, fake_vae = G_curr(noise_init, opt.Noise_Amps, noise_init=noise_init, mode="rand")
+        #                 fake_var.append(fake)
+        #                 fake_vae_var.append(fake_vae)
+        #             fake_var = torch.cat(fake_var, dim=0)
+        #             fake_vae_var = torch.cat(fake_vae_var, dim=0)
+
+        #         opt.summary.visualize_video(opt, iteration, real, 'Real')
+        #         opt.summary.visualize_video(opt, iteration, generated, 'Generated')
+        #         opt.summary.visualize_video(opt, iteration, generated_vae, 'Generated VAE')
+        #         opt.summary.visualize_video(opt, iteration, fake_var, 'Fake var')
+        #         opt.summary.visualize_video(opt, iteration, fake_vae_var, 'Fake VAE var')
 
     epoch_iterator.close()
 
-    # Save data
-    opt.saver.save_checkpoint({'data': opt.Noise_Amps}, 'Noise_Amps.pth')
+
+    ## Save data
+    opt.saver.save_checkpoint({'data': opt.Noise_Amps}, 'Noise_Amps.ckpt')
     opt.saver.save_checkpoint({
         'scale': opt.scale_idx,
-        'state_dict': netG.state_dict(),
-        'optimizer': optimizerG.state_dict(),
+        'parameters_dict': netG.parameters_dict(),
+        'optimizer': optimizerG.parameters_dict(),
         'noise_amps': opt.Noise_Amps,
-    }, 'netG.pth')
+    }, 'netG.ckpt')
     if opt.vae_levels < opt.scale_idx + 1:
         opt.saver.save_checkpoint({
             'scale': opt.scale_idx,
-            'state_dict': D_curr.module.state_dict() if opt.device == 'cuda' else D_curr.state_dict(),
-            'optimizer': optimizerD.state_dict(),
-        }, 'netD_{}.pth'.format(opt.scale_idx))
+            'parameters_dict': D_curr.module.parameters_dict()
+                          if opt.device != 'CPU' else D_curr.parameters_dict(),
+            'optimizer': optimizerD.parameters_dict(),
+        }, 'netD_{}.ckpt'.format(opt.scale_idx))
 
 
 if __name__ == '__main__':
+    ## Parser
     parser = argparse.ArgumentParser()
 
-    # load, input, save configurations:
+    # Load, input, save configurations
     parser.add_argument('--netG', default='', help='path to netG (to continue training)')
     parser.add_argument('--netD', default='', help='path to netD (to continue training)')
     parser.add_argument('--manualSeed', type=int, help='manual seed')
 
-    # networks hyper parameters:
+    # Networks hyper parameters
     parser.add_argument('--nc-im', type=int, default=3, help='# channels')
     parser.add_argument('--nfc', type=int, default=64, help='model basic # channels')
     parser.add_argument('--latent-dim', type=int, default=128, help='Latent dim size')
@@ -279,13 +277,13 @@ if __name__ == '__main__':
     parser.add_argument('--generator', type=str, default='GeneratorHPVAEGAN', help='generator model')
     parser.add_argument('--discriminator', type=str, default='WDiscriminator3D', help='discriminator model')
 
-    # pyramid parameters:
+    # Pyramid parameters
     parser.add_argument('--scale-factor', type=float, default=0.75, help='pyramid scale factor')
     parser.add_argument('--noise_amp', type=float, default=0.1, help='addative noise cont weight')
     parser.add_argument('--min-size', type=int, default=32, help='image minimal size at the coarser scale')
     parser.add_argument('--max-size', type=int, default=256, help='image minimal size at the coarser scale')
 
-    # optimization hyper parameters:
+    # Optimization hyper parameters
     parser.add_argument('--niter', type=int, default=50000, help='number of iterations to train per scale')
     parser.add_argument('--lr-g', type=float, default=0.0005, help='learning rate, default=0.0005')
     parser.add_argument('--lr-d', type=float, default=0.0005, help='learning rate, default=0.0005')
@@ -310,7 +308,7 @@ if __name__ == '__main__':
     parser.add_argument('--stop-scale-time', type=int, default=-1)
     parser.add_argument('--data-rep', type=int, default=1000, help='data repetition')
 
-    # main arguments
+    # Main arguments
     parser.add_argument('--checkname', type=str, default='DEBUG', help='check name')
     parser.add_argument('--mode', default='train', help='task to be done')
     parser.add_argument('--batch-size', type=int, default=1, help='batch size')
@@ -321,23 +319,24 @@ if __name__ == '__main__':
     parser.set_defaults(hflip=False)
     opt = parser.parse_args()
 
+
     assert opt.vae_levels > 0
     assert opt.disc_loss_weight > 0
 
-    # Define Saver
+
+    ## Define & Initialize
+    # Saver
     opt.saver = utils.VideoSaver(opt)
 
-    # Define Tensorboard Summary
-    opt.summary = utils.TensorboardSummary(opt.saver.experiment_dir)
+    # Tensorboard Summary
+    # opt.summary = utils.TensorboardSummary(opt.saver.experiment_dir)
     logger.configure_logging(os.path.abspath(os.path.join(opt.saver.experiment_dir, 'logbook.txt')))
 
-    # CUDA
-    device = 'cuda' if torch.cuda.is_available() and not opt.no_cuda else 'cpu'
+    # Device
+    device = mindspore.get_context('device_target')
     opt.device = device
-    if torch.cuda.is_available() and device == 'cpu':
-        logging.info("WARNING: You have a CUDA device, so you should probably run with --cuda")
 
-    # Initial config
+    # Config
     opt.noise_amp_init = opt.noise_amp
     opt.scale_factor_init = opt.scale_factor
 
@@ -349,23 +348,22 @@ if __name__ == '__main__':
         opt.manualSeed = random.randint(1, 10000)
     logging.info("Random Seed: {}".format(opt.manualSeed))
     random.seed(opt.manualSeed)
-    torch.manual_seed(opt.manualSeed)
+    mindspore.set_seed(opt.manualSeed)
 
     # Reconstruction loss
-    opt.rec_loss = torch.nn.MSELoss()
+    opt.rec_loss = nn.RMSELoss()
 
     # Initial parameters
     opt.scale_idx = 0
     opt.nfc_prev = 0
     opt.Noise_Amps = []
 
-    # Date
-    dataset = SingleVideoDataset(opt)
-    data_loader = DataLoader(dataset,
-                             shuffle=True,
-                             drop_last=True,
-                             batch_size=opt.batch_size,
-                             num_workers=4)
+    # Dataset
+    dataset_generator = SingleVideoDataset(opt)
+    dataset = GeneratorDataset(dataset_generator, shuffle=True)
+    dataset = dataset.batch(opt.batch_size)
+    dataset = dataset.shuffle(4)
+    data_loader = dataset.create_dict_iterator()
 
     if opt.stop_scale_time == -1:
         opt.stop_scale_time = opt.stop_scale
@@ -373,6 +371,8 @@ if __name__ == '__main__':
     opt.dataset = dataset
     opt.data_loader = data_loader
 
+
+    ## Load
     with open(os.path.join(opt.saver.experiment_dir, 'args.txt'), 'w') as args_file:
         for argument, value in sorted(vars(opt).items()):
             if type(value) in (str, int, float, tuple, list, bool):
@@ -397,25 +397,28 @@ if __name__ == '__main__':
             logging.info("{}Rec. Weight    :{} {}{}".format(blue, clear, opt.rec_weight, clear))
             logging.info("{}Sampling rates :{} {}{}".format(blue, clear, opt.sampling_rates, clear))
 
-    # Current networks
+
+    ## Current networks
     assert hasattr(networks_3d, opt.generator)
-    netG = getattr(networks_3d, opt.generator)(opt).to(opt.device)
+    netG = getattr(networks_3d, opt.generator)(opt)
 
     if opt.netG != '':
         if not os.path.isfile(opt.netG):
             raise RuntimeError("=> no <G> checkpoint found at '{}'".format(opt.netG))
-        checkpoint = torch.load(opt.netG)
+        checkpoint = mindspore.load_checkpoint(opt.netG)
         opt.scale_idx = checkpoint['scale']
         opt.resumed_idx = checkpoint['scale']
         opt.resume_dir = '/'.join(opt.netG.split('/')[:-1])
         for _ in range(opt.scale_idx):
             netG.init_next_stage()
-        netG.load_state_dict(checkpoint['state_dict'])
-        # NoiseAmp
-        opt.Noise_Amps = torch.load(os.path.join(opt.resume_dir, 'Noise_Amps.pth'))['data']
+        netG.load_param_into_net(checkpoint['state_dict'])
+        # Noise Amp
+        opt.Noise_Amps = mindspore.load_checkpoint(os.path.join(opt.resume_dir, 'Noise_Amps.ckpt'))['data']
     else:
         opt.resumed_idx = -1
 
+
+    ## Train
     while opt.scale_idx < opt.stop_scale + 1:
         if (opt.scale_idx > 0) and (opt.resumed_idx != opt.scale_idx):
             netG.init_next_stage()

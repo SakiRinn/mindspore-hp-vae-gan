@@ -1,6 +1,6 @@
-import mindspore.ops as ops
 import mindspore.nn as nn
-from modules import calc_gradient_penalty
+import mindspore.ops as ops
+from utils import calc_gradient_penalty
 
 log = ops.Log()
 matmul = ops.MatMul()
@@ -63,7 +63,7 @@ class GWithLoss(nn.Cell):
 
             self.total_loss += vae_loss
         else:
-            ## (2) G loss
+            ## (2) Generator loss
             rec_loss = self._opt.rec_loss(generated, real)
             errG_total = self._opt.rec_weight * rec_loss
 
