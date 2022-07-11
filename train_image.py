@@ -135,6 +135,7 @@ def train(opt :argparse.Namespace, netG):
         if opt.scale_idx > 0:
             real, real_zero = data
         else:
+            real = data
             real_zero = real
 
         initial_size = utils.get_scales_by_index(0, opt.scale_factor, opt.stop_scale, opt.img_size)

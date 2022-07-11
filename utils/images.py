@@ -23,7 +23,7 @@ uniform_int = ops.UniformInt()
 
 def interpolate(input, size=None):
     resize_bilinear = ops.ResizeBilinear(size, align_corners=True)    # TODO: align_corners
-    
+
     if input.dim() == 5:
         b, c, t, h0, w0 = input.shape
         img = transpose(input, (0, 2, 1, 3, 4)).reshape(input.shape[0] + input.shape[1],
@@ -38,12 +38,11 @@ def interpolate(input, size=None):
 
 
 def interpolate_3D(input, size=None):
-    # assert input.dim() == 5, "input must be 5D"
     if input.dim() != 5:
         exit(1)
-    # resize_bilinear = ops.ResizeTrilinear(size, align_corners=True)    # FIXME: 没有三线性插值
+    # resize_bilinear = ops.ResizeTrilinear(size, align_corners=True)
     # scaled = resize_bilinear(input)
-    
+
     input = input.asnumpy()
     input = torch.Tensor(input)
     scaled = F.interpolate(input, size=size, align_corners=True).to(np.float32)

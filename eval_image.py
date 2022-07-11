@@ -28,11 +28,7 @@ def eval(opt, netG):
         initial_size = [int(initial_size * opt.ar), initial_size]
         opt.Z_init_size = [opt.batch_size, opt.latent_dim, *initial_size]
 
-    # Parallel
-    if opt.device == 'cuda':
-        G_curr = torch.nn.DataParallel(netG)
-    else:
-        G_curr = netG
+    G_curr = netG
 
     progressbar_args = {
         "iterable": range(opt.niter),
@@ -44,11 +40,9 @@ def eval(opt, netG):
         "postfix": True
     }
     epoch_iterator = tools.create_progressbar(**progressbar_args)
-
     iterator = iter(data_loader)
 
     random_samples = []
-
     for iteration in epoch_iterator:
         try:
             data = next(iterator)
@@ -81,9 +75,10 @@ def eval(opt, netG):
             fake_var = torch.cat(fake_var, dim=0)
             fake_vae_var = torch.cat(fake_vae_var, dim=0)
 
-        opt.summary.visualize_image(opt, iteration, real, 'Real')
-        opt.summary.visualize_image(opt, iteration, fake_var, 'Fake var')
-        opt.summary.visualize_image(opt, iteration, fake_vae_var, 'Fake VAE var')
+        # Tensorboard
+        # opt.summary.visualize_image(opt, iteration, real, 'Real')
+        # opt.summary.visualize_image(opt, iteration, fake_var, 'Fake var')
+        # opt.summary.visualize_image(opt, iteration, fake_vae_var, 'Fake VAE var')
 
         random_samples.append(fake_var)
 
@@ -102,7 +97,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch-size', type=int, default=1)
     parser.add_argument('--data-rep', type=int, default=1, help='data repetition')
     parser.add_argument('--no-cuda', action='store_true', default=False, help='disables cuda')
-    
+
     parser.set_defaults(hflip=False)
     opt = parser.parse_args()
 
@@ -149,10 +144,10 @@ if __name__ == '__main__':
         logger.configure_logging(os.path.abspath(os.path.join(opt.experiment_dir, 'logbook.txt')))
 
         # CUDA
-        device = 'cuda' if torch.cuda.is_available() and not opt.no_cuda else 'cpu'
-        opt.device = device
-        if torch.cuda.is_available() and device == 'cpu':
-            logging.info("WARNING: You have a CUDA device, so you should probably run with --cuda")
+        # device = 'cuda' if torch.cuda.is_available() and not opt.no_cuda else 'cpu'
+        # opt.device = device
+        # if torch.cuda.is_available() and device == 'cpu':
+        #     logging.info("WARNING: You have a CUDA device, so you should probably run with --cuda")
 
         # Adjust scales
         utils.adjust_scales2image(opt.img_size, opt)
@@ -169,7 +164,6 @@ if __name__ == '__main__':
                                  drop_last=True,
                                  batch_size=opt.batch_size,
                                  num_workers=2)
-
         opt.dataset = dataset
         opt.data_loader = data_loader
 

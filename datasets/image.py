@@ -14,10 +14,8 @@ import utils
 normalize = Normalize(mean=[0.5], std=[0.5])
 
 
-class SingleImageDataset(ds.Dataset):
+class SingleImageDataset:
     def __init__(self, opt, transforms=None):
-        super(SingleImageDataset, self).__init__()
-
         self.zero_scale_frames = None
         self.frames = None
 
@@ -37,7 +35,8 @@ class SingleImageDataset(ds.Dataset):
         self._opt = opt
 
     def __len__(self):
-        return self._opt.data_rep
+        # return self._opt.data_rep
+        return 1
 
     def __getitem__(self, idx):
         hflip = random.random() < 0.5 if self._opt.hflip else False
@@ -58,9 +57,9 @@ class SingleImageDataset(ds.Dataset):
             images_zero_scale = images_zero_scale / 255
             images_zero_scale_transformed = self._get_transformed_images(images_zero_scale, hflip)
 
-            return [images_transformed, images_zero_scale_transformed]
+            return [(images_transformed, images_zero_scale_transformed)]    # FIXME: 无法返回列表，shape不同
 
-        return images_transformed
+        return [images_transformed]
 
     @staticmethod
     def _get_transformed_images(images, hflip):
@@ -98,12 +97,12 @@ if __name__ == '__main__':
             self.data_rep = 1000
             self.scale_factor = 0.75
             self.stop_scale = 9
-            self.scale_idx = 0
+            self.scale_idx = 1
 
     opt = Opt()
     # 实例化数据集类
     dataset_generator = SingleImageDataset(opt)
-    dataset = ds.GeneratorDataset(dataset_generator)
-    data_loader = dataset.create_tuple_iterator()
+    dataset = ds.GeneratorDataset(dataset_generator, ['data'])
+    dl = dataset.create_dict_iterator()
     # 打印数据条数
-    print(next(data_loader))
+    print(next(dl))
