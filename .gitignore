@@ -128,8 +128,12 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
+# mindspore
 modules/kernel_meta
 modules/rank_0/
+modules/log.txt
 datasets/kernel_meta
 datasets/rank_0
+datasets/log.txt
 rank_0
+log.txt
