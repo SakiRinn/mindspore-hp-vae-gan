@@ -154,7 +154,7 @@ def train(opt, netG):
         if opt.scale_idx > 0:
             real, real_zero = data
         else:
-            real = data
+            real, _ = data
             real_zero = real
 
         noise_init = utils.generate_noise(size=opt.Z_init_size)
@@ -179,14 +179,14 @@ def train(opt, netG):
 
 
         ## Update parameters
-        generated, generated_vae, (mu, logvar) = G_curr(real_zero, opt.Noise_Amps, mode="rec")
+        generated, generated_vae, (mu, logvar) = G_curr(real_zero, opt.Noise_Amps, randMode=False)
         if opt.vae_levels >= opt.scale_idx + 1:
             # (1) Update VAE network
             G_loss.VAEMode(True)
             G_train(real, real_zero, fake, generated, generated_vae, mu, logvar)
         else:
             # (2) Update distriminator: maximize D(x) + D(G(z))
-            fake, _ = G_curr(noise_init, opt.Noise_Amps, noise_init=noise_init, mode="rand")
+            fake, _ = G_curr(noise_init, opt.Noise_Amps, noise_init=noise_init, randMode=True)
             D_train(real, fake)
 
             # (3) Update generator: maximize D(G(z)) (After grad clipping)
@@ -360,7 +360,7 @@ if __name__ == '__main__':
 
     # Dataset
     dataset_generator = SingleVideoDataset(opt)
-    dataset = GeneratorDataset(dataset_generator, shuffle=True)
+    dataset = GeneratorDataset(dataset_generator, ['data', 'zero-scale data'],shuffle=True)
     dataset = dataset.batch(opt.batch_size)
     dataset = dataset.shuffle(4)
     data_loader = dataset.create_dict_iterator()

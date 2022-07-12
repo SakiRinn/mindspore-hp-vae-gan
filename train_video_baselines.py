@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 import torch.optim as optim
 
 from modules import networks_3d
-from modules.util import *
+from modules.utils import *
 from datasets import SingleVideoDataset
 
 clear = colorama.Style.RESET_ALL
