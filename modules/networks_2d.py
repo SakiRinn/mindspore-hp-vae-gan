@@ -242,7 +242,7 @@ class GeneratorHPVAEGAN(nn.Cell):
         else:
             self.body.append(copy.deepcopy(self.body[-1]))
 
-    def construct(self, video, noise_amp, noise_init=None, sample_init=None, mode='rand'):
+    def construct(self, video, noise_amp, noise_init=None, sample_init=None, randMode=False):
         if sample_init is not None:
             if len(self.body) <= sample_init[0]:
                 exit(1)
@@ -256,16 +256,16 @@ class GeneratorHPVAEGAN(nn.Cell):
         vae_out = tanh(self.decoder(z_vae))
 
         if sample_init is not None:
-            x_prev_out = self.refinement_layers(sample_init[0], sample_init[1], noise_amp, mode)
+            x_prev_out = self.refinement_layers(sample_init[0], sample_init[1], noise_amp, randMode)
         else:
-            x_prev_out = self.refinement_layers(0, vae_out, noise_amp, mode)
+            x_prev_out = self.refinement_layers(0, vae_out, noise_amp, randMode)
 
         if noise_init is None:
             return x_prev_out, vae_out, (mu, logvar)
         else:
             return x_prev_out, vae_out
 
-    def refinement_layers(self, start_idx, x_prev_out, noise_amp, mode):
+    def refinement_layers(self, start_idx, x_prev_out, noise_amp, randMode=False):
         for idx, block in enumerate(self.body[start_idx:], start_idx):
             if self.opt.vae_levels == idx + 1 and not self.opt.train_all:
                 x_prev_out = ops.stop_gradient(x_prev_out)
@@ -274,7 +274,7 @@ class GeneratorHPVAEGAN(nn.Cell):
             x_prev_out_up = utils.upscale_2d(x_prev_out, idx + 1, self.opt)
 
             # Add noise if "random" sampling, else, add no noise is "reconstruction" mode
-            if mode == 'rand':
+            if randMode:
                 noise = utils.generate_noise(ref=x_prev_out_up)
                 x_prev = block(x_prev_out_up + noise * noise_amp[idx + 1])
             else:
@@ -325,7 +325,7 @@ class GeneratorVAE_nb(nn.Cell):
             self.body.append(copy.deepcopy(self.body[-1]))
 
     def construct(self, video, noise_amp,
-                  noise_init_norm=None, noise_init_bern=None, sample_init=None, mode='rand'):
+                  noise_init_norm=None, noise_init_bern=None, sample_init=None, randMode=False):
         if sample_init is not None:
             if len(self.body) <= sample_init[0]:
                 exit(1)
@@ -341,16 +341,16 @@ class GeneratorVAE_nb(nn.Cell):
         vae_out = tanh(self.decoder(z_vae_norm * z_vae_bern))
 
         if sample_init is not None:
-            x_prev_out = self.refinement_layers(sample_init[0], sample_init[1], noise_amp, mode)
+            x_prev_out = self.refinement_layers(sample_init[0], sample_init[1], noise_amp, randMode)
         else:
-            x_prev_out = self.refinement_layers(0, vae_out, noise_amp, mode)
+            x_prev_out = self.refinement_layers(0, vae_out, noise_amp, randMode)
 
         if noise_init_norm is None:
             return x_prev_out, vae_out, (mu, logvar, bern)
         else:
             return x_prev_out, vae_out
 
-    def refinement_layers(self, start_idx, x_prev_out, noise_amp, mode):
+    def refinement_layers(self, start_idx, x_prev_out, noise_amp, randMode=False):
         for idx, block in enumerate(self.body[start_idx:], start_idx):
             if self.opt.vae_levels == idx + 1:
                 x_prev_out = ops.stop_gradient(x_prev_out)
@@ -358,11 +358,13 @@ class GeneratorVAE_nb(nn.Cell):
             # Upscale
             x_prev_out_up = utils.upscale_2d(x_prev_out, idx + 1, self.opt)
 
-            # Add noise if "random" sampling, else, add no noise is "reconstruction" mode
-            if mode == 'rand':
+            # Whether add noise
+            if randMode:
+                # Yes in random mode
                 noise = utils.generate_noise(ref=x_prev_out_up)
                 x_prev = block(x_prev_out_up + noise * noise_amp[idx + 1])
             else:
+                # No in reconstruction mode
                 x_prev = block(x_prev_out_up)
 
             x_prev_out = tanh(x_prev + x_prev_out_up)

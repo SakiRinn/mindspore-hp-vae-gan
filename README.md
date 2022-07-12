@@ -17,3 +17,5 @@
 extract已完工。
 
 train_image.py, train_video.py已完工。测试中。
+
+" 训练: python train_image.py --image-path data/imgs/air_balloons.jpg --vae-levels 3 --checkname myimagetest

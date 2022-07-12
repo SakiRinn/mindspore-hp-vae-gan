@@ -57,9 +57,9 @@ class SingleImageDataset:
             images_zero_scale = images_zero_scale / 255
             images_zero_scale_transformed = self._get_transformed_images(images_zero_scale, hflip)
 
-            return [(images_transformed, images_zero_scale_transformed)]    # FIXME: 无法返回列表，shape不同
+            return [images_transformed, images_zero_scale_transformed]
 
-        return [images_transformed]
+        return [images_transformed, np.zeros_like(images_transformed)]
 
     @staticmethod
     def _get_transformed_images(images, hflip):
@@ -97,12 +97,12 @@ if __name__ == '__main__':
             self.data_rep = 1000
             self.scale_factor = 0.75
             self.stop_scale = 9
-            self.scale_idx = 1
+            self.scale_idx = 0
 
     opt = Opt()
     # 实例化数据集类
     dataset_generator = SingleImageDataset(opt)
-    dataset = ds.GeneratorDataset(dataset_generator, ['data'])
+    dataset = ds.GeneratorDataset(dataset_generator, ['data1', 'data2'])
     dl = dataset.create_dict_iterator()
     # 打印数据条数
     print(next(dl))

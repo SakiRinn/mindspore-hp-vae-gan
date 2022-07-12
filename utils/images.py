@@ -66,7 +66,7 @@ def generate_noise(ref=None, size=None, type='normal', emb_size=None):
     if ref is not None:
         noise = Tensor(shape=ref.shape, init=Zero(), dtype=mstype.float32)
     elif size is not None:
-        noise = Tensor(shape=size, init=Zero())
+        noise = Tensor(shape=size, init=Zero(), dtype=mstype.float32)
     else:
         # raise Exception("ref or size must be applied")
         exit(1)

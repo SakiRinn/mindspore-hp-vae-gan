@@ -26,7 +26,7 @@ cat = ops.Concat()
 RMSELoss = nn.RMSELoss()
 
 
-def train(opt :argparse.Namespace, netG):
+def train(opt, netG):
     ############
     ### INIT ###
     ############
@@ -48,8 +48,12 @@ def train(opt :argparse.Namespace, netG):
                                           .format(opt.saver.experiment_dir, opt.scale_idx - 1))['state_dict']
             )
 
-        # Current optimizer for discriminator
+        # Optimizer
         optimizerD = nn.Adam(D_curr.get_parameters(), opt.lr_d, beta1=opt.beta1, beta2=0.999)
+        # With-loss cell
+        D_loss = DWithLoss(opt, D_curr, G_curr)
+        # Train-one-step cell
+        D_train = nn.TrainOneStepCell(D_loss, optimizerD)
 
 
     ## Generator
@@ -97,14 +101,11 @@ def train(opt :argparse.Namespace, netG):
 
     # Current generator
     G_curr = netG
-    # Current optimizer for generator
+    # Optimizer
     optimizerG = ClippedAdam(opt, parameter_list, opt.lr_g, beta1=opt.beta1, beta2=0.999)
-
-
-    ## Train-one-step cell
-    D_loss = DWithLoss(opt, D_curr, G_curr)
+    # With-loss cell
     G_loss = GWithLoss(opt, G_curr)
-    D_train = nn.TrainOneStepCell(D_loss, optimizerD)
+    # Train-one-step cell
     G_train = nn.TrainOneStepCell(G_loss, optimizerG)
 
 
@@ -136,7 +137,7 @@ def train(opt :argparse.Namespace, netG):
         if opt.scale_idx > 0:
             real, real_zero = data
         else:
-            real = data
+            real, _ = data
             real_zero = real
 
         initial_size = utils.get_scales_by_index(0, opt.scale_factor, opt.stop_scale, opt.img_size)
@@ -156,7 +157,7 @@ def train(opt :argparse.Namespace, netG):
                     opt.Noise_Amps.append(opt.noise_amp)
                 else:
                     opt.Noise_Amps.append(0)
-                    z_reconstruction, _, _ = G_curr(real_zero, opt.Noise_Amps, mode="rec")
+                    z_reconstruction, _, _ = G_curr(real_zero, opt.Noise_Amps, randMode=False)
                     RMSE = RMSELoss(real, z_reconstruction)
                     RMSE = ops.stop_gradient(RMSE)
 
@@ -165,14 +166,14 @@ def train(opt :argparse.Namespace, netG):
 
 
         ## Update parameters
-        generated, generated_vae, (mu, logvar) = G_curr(real_zero, opt.Noise_Amps, mode="rec")
+        generated, generated_vae, (mu, logvar) = G_curr(real_zero, opt.Noise_Amps, randMode=False)
         if opt.vae_levels >= opt.scale_idx + 1:
             # (1) Update VAE network
             G_loss.VAEMode(True)
             G_train(real, real_zero, fake, generated, generated_vae, mu, logvar)
         else:
             # (2) Update distriminator: maximize D(x) + D(G(z))
-            fake, _ = G_curr(noise_init, opt.Noise_Amps, noise_init=noise_init, mode="rand")
+            fake, _ = G_curr(noise_init, opt.Noise_Amps, noise_init=noise_init, randMode=True)
             D_train(real, fake)
 
             # (3) Update generator: maximize D(G(z)) (After grad clipping)
@@ -296,7 +297,7 @@ if __name__ == '__main__':
     parser.add_argument('--mode', default='train', help='task to be done')
     parser.add_argument('--batch-size', type=int, default=2, help='batch size')
     parser.add_argument('--print-interval', type=int, default=100, help='print interva')
-    parser.add_argument('--visualize', action='store_true', default=False, help='visualize using tensorboard')
+    # parser.add_argument('--visualize', action='store_true', default=False, help='visualize using tensorboard')
     parser.add_argument('--no-cuda', action='store_true', default=False, help='disables cuda')
 
     parser.set_defaults(hflip=False)
@@ -345,10 +346,10 @@ if __name__ == '__main__':
 
     # Dataset
     dataset_generator = SingleImageDataset(opt)
-    dataset = GeneratorDataset(dataset_generator, shuffle=True)
+    dataset = GeneratorDataset(dataset_generator, ['data', 'zero-scale data'],shuffle=True)
     dataset = dataset.batch(opt.batch_size)
     dataset = dataset.shuffle(4)
-    data_loader = dataset.create_dict_iterator()
+    data_loader = dataset.create_tuple_iterator()
 
     if opt.stop_scale_time == -1:
         opt.stop_scale_time = opt.stop_scale
