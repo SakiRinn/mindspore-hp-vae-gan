@@ -390,9 +390,9 @@ if __name__ == '__main__':
             self.stop_scale = 9
             self.scale_idx = 0
             self.vae_levels = 3
+            self.Noise_Amps = [1, 1, 1]
 
     opt = Opt()
-    opt.Noise_Amps = [1, 1, 1]
     dataset = datasets.SingleImageDataset(opt)
     model = GeneratorHPVAEGAN(opt)
     model.init_next_stage()

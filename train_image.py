@@ -11,11 +11,13 @@ from modules.losses import DWithLoss, GWithLoss
 from modules.optimizers import ClippedAdam
 from datasets import SingleImageDataset
 
+from mindspore import context, Tensor
 import mindspore
 import mindspore.nn as nn
 import mindspore.ops as ops
 from mindspore.dataset import GeneratorDataset
 
+context.set_context(mode=context.PYNATIVE_MODE)
 
 clear = colorama.Style.RESET_ALL
 blue = colorama.Fore.CYAN + colorama.Style.BRIGHT
@@ -170,7 +172,7 @@ def train(opt, netG):
         if opt.vae_levels >= opt.scale_idx + 1:
             # (1) Update VAE network
             G_loss.VAEMode(True)
-            G_train(real, real_zero, fake, generated, generated_vae, mu, logvar)
+            G_train(real, real_zero, generated, generated_vae, mu, logvar, Tensor(0))
         else:
             # (2) Update distriminator: maximize D(x) + D(G(z))
             fake, _ = G_curr(noise_init, opt.Noise_Amps, noise_init=noise_init, randMode=True)
@@ -178,7 +180,7 @@ def train(opt, netG):
 
             # (3) Update generator: maximize D(G(z)) (After grad clipping)
             G_loss.VAEMode(False)
-            G_train(real, real_zero, fake, generated, generated_vae, mu, logvar)
+            G_train(real, real_zero, generated, generated_vae, mu, logvar, fake)
 
 
         ## Update progress bar

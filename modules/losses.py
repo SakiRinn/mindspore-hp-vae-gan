@@ -2,13 +2,17 @@ import mindspore.nn as nn
 import mindspore.ops as ops
 from utils import calc_gradient_penalty
 
+# from networks_2d import GeneratorHPVAEGAN, WDiscriminator2D
+
 log = ops.Log()
 matmul = ops.MatMul()
+pow = ops.Pow()
+exp = ops.Exp()
 total_loss = 0
 
 
 def kl_criterion(mu, logvar):
-    KLD = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp())
+    KLD = -0.5 * (1 + logvar - pow(mu, 2) - exp(logvar))
     return KLD.mean()
 
 
@@ -54,7 +58,7 @@ class GWithLoss(nn.Cell):
     def VAEMode(self, flag):
         self.isVAE = flag
 
-    def construct(self, real, real_zero, fake, generated, generated_vae, mu, logvar):
+    def construct(self, real, real_zero, generated, generated_vae, mu, logvar, fake):
         if self.isVAE:
             ## (1) VAE loss
             rec_vae_loss = self._opt.rec_loss(generated, real) + self._opt.rec_loss(generated_vae, real_zero)
@@ -79,3 +83,38 @@ class GWithLoss(nn.Cell):
     @property
     def backbone_network(self):
         return self._netG
+
+
+if __name__ == '__main__':
+    class Opt:
+        def __init__(self):
+            self.nfc = 64
+            self.nc_im = 3
+            self.ker_size = 3
+            self.num_layer = 5
+            self.latent_dim = 128
+            self.enc_blocks = 2
+            self.padd_size = 1
+            self.image_path = '../data/imgs/air_balloons.jpg'
+            self.hflip = True
+            self.img_size = 256
+            self.data_rep = 1000
+            self.scale_factor = 0.75
+            self.stop_scale = 9
+            self.scale_idx = 0
+            self.vae_levels = 3
+            self.Noise_Amps = [1, 1, 1]
+
+    opt = Opt()
+    netD = WDiscriminator2D(opt)
+    netG = GeneratorHPVAEGAN(opt)
+    Gloss = GWithLoss(opt, netG)
+
+    normal = ops.StandardNormal()
+    real_zero = normal(3, 15, 20)
+    real = normal(3, 15, 20)
+    noise_init = 3
+
+    generated, generated_vae, (mu, logvar) = netG(real_zero, opt.Noise_Amps, randMode=False)
+    fake, _ = netG(noise_init, opt.Noise_Amps, noise_init=noise_init, randMode=True)
+    result = Gloss(real, real_zero, fake, generated, generated_vae, mu, logvar)
