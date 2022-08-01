@@ -17,15 +17,7 @@ import mindspore.nn as nn
 import mindspore.ops as ops
 from mindspore.dataset import GeneratorDataset
 
-context.set_context(mode=context.PYNATIVE_MODE)
-
-clear = colorama.Style.RESET_ALL
-blue = colorama.Fore.CYAN + colorama.Style.BRIGHT
-green = colorama.Fore.GREEN + colorama.Style.BRIGHT
-magenta = colorama.Fore.MAGENTA + colorama.Style.BRIGHT
-
-cat = ops.Concat()
-RMSELoss = nn.RMSELoss()
+context.set_context(mode=context.PYNATIVE_MODE, devices_id=3)
 
 
 def train(opt, netG):
@@ -34,10 +26,9 @@ def train(opt, netG):
     ############
 
     ## Discriminator
-    if opt.vae_levels < opt.scale_idx + 1:
-        # Current discriminator
-        D_curr = getattr(networks_2d, opt.discriminator)(opt)
+    D_curr = getattr(networks_2d, opt.discriminator)(opt)
 
+    if opt.vae_levels < opt.scale_idx + 1:
         # Load parameters for discriminator
         if (opt.netG != '') and (opt.resumed_idx == opt.scale_idx):
             D_curr.load_param_into_net(
@@ -106,7 +97,7 @@ def train(opt, netG):
     # Optimizer
     optimizerG = ClippedAdam(opt, parameter_list, opt.lr_g, beta1=opt.beta1, beta2=0.999)
     # With-loss cell
-    G_loss = GWithLoss(opt, G_curr)
+    G_loss = GWithLoss(opt, D_curr, G_curr)
     # Train-one-step cell
     G_train = nn.TrainOneStepCell(G_loss, optimizerG)
 
@@ -160,7 +151,7 @@ def train(opt, netG):
                 else:
                     opt.Noise_Amps.append(0)
                     z_reconstruction, _, _ = G_curr(real_zero, opt.Noise_Amps, randMode=False)
-                    RMSE = RMSELoss(real, z_reconstruction)
+                    RMSE = nn.RMSELoss()(real, z_reconstruction)
                     RMSE = ops.stop_gradient(RMSE)
 
                     opt.noise_amp = opt.noise_amp_init * RMSE.item() / opt.batch_size
@@ -305,11 +296,17 @@ if __name__ == '__main__':
     parser.set_defaults(hflip=False)
     opt = parser.parse_args()
 
-
     assert opt.vae_levels > 0
     assert opt.disc_loss_weight > 0
     if opt.data_rep < opt.batch_size:
         opt.data_rep = opt.batch_size
+
+
+    ## Color
+    clear = colorama.Style.RESET_ALL
+    blue = colorama.Fore.CYAN + colorama.Style.BRIGHT
+    green = colorama.Fore.GREEN + colorama.Style.BRIGHT
+    magenta = colorama.Fore.MAGENTA + colorama.Style.BRIGHT
 
 
     ## Define & Initialize

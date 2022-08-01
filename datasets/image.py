@@ -7,8 +7,6 @@ import os
 from mindspore.dataset.vision.c_transforms import Normalize
 import mindspore.dataset as ds
 
-import sys
-sys.path.insert(0, '..')
 import utils
 
 normalize = Normalize(mean=[0.5], std=[0.5])

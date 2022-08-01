@@ -16,14 +16,6 @@ import mindspore.nn as nn
 import mindspore.ops as ops
 from mindspore.dataset import GeneratorDataset
 
-cat = ops.Concat()
-RMSELoss = nn.RMSELoss()
-
-clear = colorama.Style.RESET_ALL
-blue = colorama.Fore.CYAN + colorama.Style.BRIGHT
-green = colorama.Fore.GREEN + colorama.Style.BRIGHT
-magenta = colorama.Fore.MAGENTA + colorama.Style.BRIGHT
-
 
 def train(opt, netG):
     ############
@@ -121,7 +113,7 @@ def train(opt, netG):
 
     ## Train-one-step cell
     D_loss = DWithLoss(opt, D_curr, G_curr)
-    G_loss = GWithLoss(opt, G_curr)
+    G_loss = GWithLoss(opt, D_curr, G_curr)
     D_train = nn.TrainOneStepCell(D_loss, optimizerD)
     G_train = nn.TrainOneStepCell(G_loss, optimizerG)
 
@@ -171,7 +163,7 @@ def train(opt, netG):
                 else:
                     opt.Noise_Amps.append(0)
                     z_reconstruction, _, _ = G_curr(real_zero, opt.Noise_Amps, mode="rec")
-                    RMSE = RMSELoss(real, z_reconstruction)
+                    RMSE = nn.RMSELoss()(real, z_reconstruction)
                     RMSE = ops.stop_gradient(RMSE)
 
                     opt.noise_amp = opt.noise_amp_init * RMSE.item() / opt.batch_size
@@ -319,9 +311,15 @@ if __name__ == '__main__':
     parser.set_defaults(hflip=False)
     opt = parser.parse_args()
 
-
     assert opt.vae_levels > 0
     assert opt.disc_loss_weight > 0
+
+
+    ## Color
+    clear = colorama.Style.RESET_ALL
+    blue = colorama.Fore.CYAN + colorama.Style.BRIGHT
+    green = colorama.Fore.GREEN + colorama.Style.BRIGHT
+    magenta = colorama.Fore.MAGENTA + colorama.Style.BRIGHT
 
 
     ## Define & Initialize

@@ -1,6 +1,6 @@
 from __future__ import absolute_import, division, print_function
-
 import copy
+
 import mindspore.nn as nn
 import mindspore.nn.probability.distribution as msd
 import mindspore.ops as ops
@@ -9,8 +9,7 @@ from mindspore import dtype as mstype
 from mindspore.common.initializer import Normal, Zero
 
 import sys
-sys.path.insert(0, "..")
-sys.path.append("../datasets")
+sys.path.insert(0, '.')
 import datasets
 import utils
 
@@ -135,7 +134,6 @@ class Encode2DVAE_nb(nn.Cell):
                               opt.ker_size // 2, 1, bn=False, act=None)
         self.logvar = ConvBlock2D(opt.nfc, output_dim, opt.ker_size,
                                   opt.ker_size // 2, 1, bn=False, act=None)
-
         self.bern = ConvBlock2D(opt.nfc, 1, opt.ker_size, opt.ker_size // 2, 1, bn=False, act=None)
 
     def construct(self, x):
@@ -373,6 +371,8 @@ class GeneratorVAE_nb(nn.Cell):
 
 
 if __name__ == '__main__':
+    from mindspore import context
+    context.set_context(device_target='Ascend', device_id=6, mode=context.PYNATIVE_MODE)
     class Opt:
         def __init__(self):
             self.nfc = 64
@@ -382,7 +382,7 @@ if __name__ == '__main__':
             self.latent_dim = 128
             self.enc_blocks = 2
             self.padd_size = 1
-            self.image_path = '../data/imgs/air_balloons.jpg'
+            self.image_path = './data/imgs/air_balloons.jpg'
             self.hflip = True
             self.img_size = 256
             self.data_rep = 1000

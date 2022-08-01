@@ -10,7 +10,6 @@ import torch
 import torch.nn.functional as F
 
 import mindspore
-mindspore.context.set_context(device_target='Ascend', device_id=5)
 
 __all__ = ['interpolate', 'interpolate_3D', 'adjust_scales2image', 'generate_noise', 'get_scales_by_index',
            'get_fps_td_by_index', 'get_fps_by_index', 'upscale', 'upscale_2d']

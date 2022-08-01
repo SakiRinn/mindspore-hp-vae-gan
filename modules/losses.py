@@ -1,8 +1,13 @@
 import mindspore.nn as nn
 import mindspore.ops as ops
+
+import sys
+sys.path.insert(0, '.')
 from utils import calc_gradient_penalty
 
-# from networks_2d import GeneratorHPVAEGAN, WDiscriminator2D
+from networks_2d import GeneratorHPVAEGAN, WDiscriminator2D
+from mindspore import context
+context.set_context(mode=context.PYNATIVE_MODE)
 
 log = ops.Log()
 matmul = ops.MatMul()
@@ -48,8 +53,9 @@ class DWithLoss(nn.Cell):
 
 
 class GWithLoss(nn.Cell):
-    def __init__(self, opt, netG):
+    def __init__(self, opt, netD, netG):
         super(GWithLoss, self).__init__(auto_prefix=False)
+        self._netD = netD
         self._netG = netG
         self._opt = opt
         self.total_loss = 0
@@ -103,18 +109,21 @@ if __name__ == '__main__':
             self.stop_scale = 9
             self.scale_idx = 0
             self.vae_levels = 3
-            self.Noise_Amps = [1, 1, 1]
+            self.Noise_Amps = [1]
+            self.rec_loss = nn.RMSELoss()
+            self.rec_weight = 10.0
 
     opt = Opt()
     netD = WDiscriminator2D(opt)
     netG = GeneratorHPVAEGAN(opt)
-    Gloss = GWithLoss(opt, netG)
+    Gloss = GWithLoss(opt, netD, netG)
 
     normal = ops.StandardNormal()
-    real_zero = normal(3, 15, 20)
-    real = normal(3, 15, 20)
-    noise_init = 3
+    real_zero = normal((1, 3, 24, 33))
+    real = normal((1, 3, 24, 33))
+    noise_init = normal((2, 128, 24, 33))
 
     generated, generated_vae, (mu, logvar) = netG(real_zero, opt.Noise_Amps, randMode=False)
     fake, _ = netG(noise_init, opt.Noise_Amps, noise_init=noise_init, randMode=True)
     result = Gloss(real, real_zero, fake, generated, generated_vae, mu, logvar)
+    print(result)
