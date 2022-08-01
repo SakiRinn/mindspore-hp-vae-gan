@@ -17,7 +17,7 @@ import mindspore.nn as nn
 import mindspore.ops as ops
 from mindspore.dataset import GeneratorDataset
 
-context.set_context(mode=context.PYNATIVE_MODE, devices_id=3)
+context.set_context(mode=context.PYNATIVE_MODE, device_id=3)
 
 
 def train(opt, netG):
