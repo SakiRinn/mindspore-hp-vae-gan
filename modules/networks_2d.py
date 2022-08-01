@@ -8,18 +8,8 @@ from mindspore import Tensor
 from mindspore import dtype as mstype
 from mindspore.common.initializer import Normal, Zero
 
-import sys
-sys.path.insert(0, '.')
 import datasets
 import utils
-
-matmul = ops.MatMul()
-exp = ops.Exp()
-log = ops.Log()
-tanh = ops.Tanh()
-sigmoid = ops.Sigmoid()
-bernoulli = msd.Bernoulli(0.5)
-uniform = msd.Uniform(0, 1)
 
 
 def get_activation(act):
@@ -35,19 +25,20 @@ def get_activation(act):
 
 def reparameterize(mu, logvar, training):
     if training:
-        std = exp(logvar * 0.5)
+        std = ops.Exp()(logvar * 0.5)
         eps = Tensor(shape=std.shape, init=Normal(), dtype=mstype.float32)
-        return matmul(eps, std) + (mu)
+        return ops.MatMul()(eps, std) + (mu)
     else:
         return Tensor(shape=mu.shape, init=Normal(), dtype=mstype.float32)
 
 
 def reparameterize_bern(x, training):
+    log = ops.Log()
     if training:
-        eps = uniform.prob(Tensor(shape=x.shape, init=Zero(), dtype=mstype.float32))
+        eps = msd.Uniform(0, 1).prob(Tensor(shape=x.shape, init=Zero(), dtype=mstype.float32))
         return log(x + 1e-20) - log(-log(eps + 1e-20) + 1e-20)
     else:
-        return bernoulli.prob(Tensor(shape=x.shape, init=Zero(), dtype=mstype.float32))
+        return msd.Bernoulli(0.5).prob(Tensor(shape=x.shape, init=Zero(), dtype=mstype.float32))
 
 
 class ConvBlock2D(nn.SequentialCell):
@@ -140,12 +131,10 @@ class Encode2DVAE_nb(nn.Cell):
         reduce_mean = ops.ReduceMean(keep_dims=True)
 
         features = self.features(x)
-        bern = sigmoid(self.bern(features))
+        bern = ops.Sigmoid()(self.bern(features))
         features = bern * features
-        mu = reduce_mean(self.mu(features), 2)     # nn.AdaptiveAvgPool2D(1)
-        mu = reduce_mean(mu, 3)
-        logvar = reduce_mean(self.logvar(features), 2)     # nn.AdaptiveAvgPool2D(1)
-        logvar = reduce_mean(logvar, 3)
+        mu = reduce_mean(self.mu(features), (-2, -1))
+        logvar = reduce_mean(self.logvar(features), (-2, -1))
 
         return mu, logvar, bern
 
@@ -251,8 +240,9 @@ class GeneratorHPVAEGAN(nn.Cell):
         else:
             z_vae = noise_init
 
-        vae_out = tanh(self.decoder(z_vae))
+        vae_out = ops.Tanh()(self.decoder(z_vae))
 
+        # (N, C, 19, 26)
         if sample_init is not None:
             x_prev_out = self.refinement_layers(sample_init[0], sample_init[1], noise_amp, randMode)
         else:
@@ -278,7 +268,7 @@ class GeneratorHPVAEGAN(nn.Cell):
             else:
                 x_prev = block(x_prev_out_up)
 
-            x_prev_out = tanh(x_prev + x_prev_out_up)
+            x_prev_out = ops.Tanh()(x_prev + x_prev_out_up)
 
         return x_prev_out
 
@@ -336,7 +326,7 @@ class GeneratorVAE_nb(nn.Cell):
             z_vae_norm = noise_init_norm
             z_vae_bern = noise_init_bern
 
-        vae_out = tanh(self.decoder(z_vae_norm * z_vae_bern))
+        vae_out = ops.Tanh()(self.decoder(z_vae_norm * z_vae_bern))
 
         if sample_init is not None:
             x_prev_out = self.refinement_layers(sample_init[0], sample_init[1], noise_amp, randMode)
@@ -365,14 +355,12 @@ class GeneratorVAE_nb(nn.Cell):
                 # No in reconstruction mode
                 x_prev = block(x_prev_out_up)
 
-            x_prev_out = tanh(x_prev + x_prev_out_up)
+            x_prev_out = ops.Tanh()(x_prev + x_prev_out_up)
 
         return x_prev_out
 
 
 if __name__ == '__main__':
-    from mindspore import context
-    context.set_context(device_target='Ascend', device_id=6, mode=context.PYNATIVE_MODE)
     class Opt:
         def __init__(self):
             self.nfc = 64
@@ -394,8 +382,9 @@ if __name__ == '__main__':
 
     opt = Opt()
     dataset = datasets.SingleImageDataset(opt)
-    model = GeneratorHPVAEGAN(opt)
+    model = GeneratorVAE_nb(opt)
     model.init_next_stage()
     from mindspore.common.initializer import One
-    x = Tensor(shape=(64, 3, 3, 3), init=One(), dtype=mstype.float32)
-    print(model(x, opt.Noise_Amps))
+    x = Tensor(shape=(64, 3, 200, 200), init=One(), dtype=mstype.float32)
+    y = model(x, opt.Noise_Amps)
+    print(y)

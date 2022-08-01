@@ -1,27 +1,20 @@
 import mindspore.nn as nn
 import mindspore.ops as ops
 
-import sys
-sys.path.insert(0, '.')
 from utils import calc_gradient_penalty
+from .networks_2d import GeneratorHPVAEGAN, WDiscriminator2D
 
-from networks_2d import GeneratorHPVAEGAN, WDiscriminator2D
 from mindspore import context
-context.set_context(mode=context.PYNATIVE_MODE)
-
-log = ops.Log()
-matmul = ops.MatMul()
-pow = ops.Pow()
-exp = ops.Exp()
-total_loss = 0
 
 
 def kl_criterion(mu, logvar):
-    KLD = -0.5 * (1 + logvar - pow(mu, 2) - exp(logvar))
+    KLD = -0.5 * (1 + logvar - ops.Pow()(mu, 2) - ops.Exp()(logvar))
     return KLD.mean()
 
 
 def kl_bern_criterion(x):
+    log = ops.Log()
+    matmul = ops.MatMul()
     KLD = matmul(x, log(x + 1e-20) - log(0.5)) + matmul(1 - x, log(1 - x + 1e-20) - log(1 - 0.5))
     return KLD.mean()
 

@@ -4,8 +4,6 @@ from mindspore import Tensor
 from mindspore import dtype as mstype
 from mindspore.common.initializer import Normal, One
 
-concat = ops.Concat()
-
 
 class GradNetWrtX(nn.Cell):
     def __init__(self, net):

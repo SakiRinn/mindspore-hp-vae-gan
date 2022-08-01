@@ -3,8 +3,6 @@ from torchvision.utils import make_grid
 from torch.utils.tensorboard import SummaryWriter
 import mindspore.ops as ops
 
-transpose = ops.Transpose()
-
 
 def norm_ip(img, min, max):
     img = img.clamp(min, max)
@@ -28,8 +26,8 @@ class TensorboardSummary(object):
 
     def visualize_video(self, opt, global_step, video, name):
 
-        video_transpose = transpose(video, (0, 2, 1, 3, 4))  # BxTxCxHxW
-        video_reshaped = video_transpose.reshape(video_transpose.shape[0] + video_transpose.shape[1], 
+        video_transpose = ops.Transpose()(video, (0, 2, 1, 3, 4))  # BxTxCxHxW
+        video_reshaped = video_transpose.reshape(video_transpose.shape[0] + video_transpose.shape[1],
                                                  *video_transpose.shape[2:])
         # (B+T)xCxHxW
 
