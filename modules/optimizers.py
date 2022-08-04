@@ -2,7 +2,13 @@ import mindspore.nn as nn
 from mindspore.ops import composite as C
 from mindspore.ops import functional as F
 
+GRADIENT_CLIP_TYPE = 1
+GRADIENT_CLIP_VALUE = 1.0
 
+clip_grad = C.MultitypeFuncGraph("clip_grad")
+
+
+@clip_grad.register("Number", "Number", "Tensor")
 def _clip_grad(clip_type, clip_value, grad):
     """
     Clip gradients.
@@ -31,8 +37,9 @@ class ClippedAdam(nn.Adam):
                  use_nesterov=False, weight_decay=0.0, loss_scale=1.0):
         super(ClippedAdam, self).__init__(params, learning_rate, beta1, beta2,
                                           eps, use_locking, use_nesterov, weight_decay, loss_scale)
+        self.hyper_map = C.HyperMap()
         self._opt = opt
 
-    def construct(self, gradients):
-        gradients = _clip_grad(1, self._opt.grad_clip, gradients)
-        return super(ClippedAdam, self).construct(gradients)
+    def construct(self, grads):
+        grads = self.hyper_map(F.partial(clip_grad, GRADIENT_CLIP_TYPE, GRADIENT_CLIP_VALUE), grads)
+        return super(ClippedAdam, self).construct(grads)

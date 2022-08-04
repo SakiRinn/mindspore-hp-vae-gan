@@ -35,8 +35,10 @@ class DWithLoss(nn.Cell):
         output = self._netD(ops.stop_gradient(fake))
         errD_fake = output.mean()
 
-        # Total error for Discriminator
+        # Gradient penalty
         gradient_penalty = calc_gradient_penalty(self._netD, real, fake, self._opt.lambda_grad)
+
+        # Total error for Discriminator
         errD_total = errD_real + errD_fake + gradient_penalty
         return errD_total
 
@@ -51,7 +53,6 @@ class GWithLoss(nn.Cell):
         self._netD = netD
         self._netG = netG
         self._opt = opt
-        self.total_loss = 0
         self.isVAE = False
 
     def VAEMode(self, flag):
@@ -64,7 +65,7 @@ class GWithLoss(nn.Cell):
             kl_loss = kl_criterion(mu, logvar)
             vae_loss = self._opt.rec_weight * rec_vae_loss + self._opt.kl_weight * kl_loss
 
-            self.total_loss += vae_loss
+            return vae_loss
         else:
             ## (2) Generator loss
             rec_loss = self._opt.rec_loss(generated, real)
@@ -75,9 +76,7 @@ class GWithLoss(nn.Cell):
             errG = -output.mean() * self._opt.disc_loss_weight
             errG_total += errG
 
-            self.total_loss += errG_total
-
-        return self.total_loss
+            return errG_total
 
     @property
     def backbone_network(self):

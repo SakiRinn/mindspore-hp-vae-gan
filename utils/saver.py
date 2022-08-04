@@ -1,6 +1,7 @@
 import glob
 import os
 import cv2
+import json
 import mindspore
 import numpy as np
 
@@ -10,7 +11,7 @@ def write_video(array, filename, opt):
     _, num_frames, height, width = array.shape
 
     FPS = opt.fps
-    video = cv2.VideoWriter(filename, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), 
+    video = cv2.VideoWriter(filename, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'),
                             float(FPS), (width, height))
 
     for i in range(num_frames):
@@ -20,7 +21,7 @@ def write_video(array, filename, opt):
     video.release()
 
 
-class VideoSaver(object):
+class VideoSaver:
     def __init__(self, opt, run_id=None):
         self.opt = opt
         if not hasattr(opt, 'experiment_dir') or not os.path.exists(opt.experiment_dir):
@@ -41,7 +42,7 @@ class VideoSaver(object):
         if not os.path.exists(self.eval_dir):
             os.makedirs(self.eval_dir)
 
-    def save_checkpoint(self, state, filename='checkpoint.pth.tar'):
+    def save_checkpoint(self, state, filename='checkpoint.ckpt'):
         filename = os.path.join(self.experiment_dir, filename)
         mindspore.save_checkpoint(state, filename)
 
@@ -75,10 +76,21 @@ class ImageSaver(object):
         if not os.path.exists(self.eval_dir):
             os.makedirs(self.eval_dir)
 
-    def save_checkpoint(self, state, filename='checkpoint.pth.tar'):
+    def save_checkpoint(self, cell, filename='checkpoint.ckpt'):
         filename = os.path.join(self.experiment_dir, filename)
-        mindspore.save_checkpoint(state, filename)
+        mindspore.save_checkpoint(cell, filename)
 
     def load_checkpoint(self, filename):
         filename = os.path.join(self.experiment_dir, filename)
         return mindspore.load_checkpoint(filename)
+
+    def save_json(self, obj, filename='config.json'):
+        filename = os.path.join(self.experiment_dir, filename)
+        with open(filename,'w+') as f:
+            json.dump(obj, f)
+
+    def load_json(self, filename):
+        filename = os.path.join(self.experiment_dir, filename)
+        with open(filename,'r+') as f:
+            obj = json.load(f)
+        return obj
