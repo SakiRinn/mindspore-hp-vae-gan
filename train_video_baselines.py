@@ -38,7 +38,7 @@ def train(opt, netG):
     if not hasattr(opt, 'Z_init'):
         initial_size = utils.get_scales_by_index(0, opt.scale_factor, opt.stop_scale, opt.img_size)
         initial_size = [int(initial_size * opt.ar), initial_size]
-        opt.Z_init = utils.generate_noise(size=[opt.batch_size, 3, opt.td, *initial_size]).to(device)
+        opt.Z_init = utils.generate_noise(size=[1, 3, opt.td, *initial_size]).to(device)
 
         opt.saver.save_checkpoint({'data': opt.Z_init}, 'Z_init.pth')
 
@@ -117,7 +117,7 @@ def train(opt, netG):
                 z_reconstruction = G_curr(opt.Z_init, opt.Noise_Amps, mode="rec")
 
                 RMSE = torch.sqrt(F.mse_loss(real, z_reconstruction))
-                opt.noise_amp = opt.noise_amp_init * RMSE.item() / opt.batch_size
+                opt.noise_amp = opt.noise_amp_init * RMSE.item() / 1
                 opt.Noise_Amps[-1] = opt.noise_amp
 
         ############################
@@ -314,7 +314,7 @@ if __name__ == '__main__':
     data_loader = DataLoader(dataset,
                              shuffle=True,
                              drop_last=True,
-                             batch_size=opt.batch_size,
+                             batch_size=1,
                              num_workers=4)
 
     if opt.stop_scale_time == -1:

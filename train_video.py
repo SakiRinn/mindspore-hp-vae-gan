@@ -39,7 +39,7 @@ def train(opt, netG):
     if not hasattr(opt, 'Z_init_size'):
         initial_size = utils.get_scales_by_index(0, opt.scale_factor, opt.stop_scale, opt.img_size)
         initial_size = [int(initial_size * opt.ar), initial_size]
-        opt.Z_init_size = [opt.batch_size, opt.latent_dim, opt.td, *initial_size]
+        opt.Z_init_size = [1, opt.latent_dim, opt.td, *initial_size]
 
 
     ## Discriminator
@@ -166,7 +166,7 @@ def train(opt, netG):
                     RMSE = nn.RMSELoss()(real, z_reconstruction)
                     RMSE = ops.stop_gradient(RMSE)
 
-                    opt.noise_amp = opt.noise_amp_init * RMSE.item() / opt.batch_size
+                    opt.noise_amp = opt.noise_amp_init * RMSE.item() / 1
                     opt.Noise_Amps[-1] = opt.noise_amp
 
 
@@ -359,7 +359,7 @@ if __name__ == '__main__':
     # Dataset
     dataset_generator = SingleVideoDataset(opt)
     dataset = GeneratorDataset(dataset_generator, ['data', 'zero-scale data'],shuffle=True)
-    dataset = dataset.batch(opt.batch_size)
+    dataset = dataset.batch(1)
     dataset = dataset.shuffle(4)
     data_loader = dataset.create_dict_iterator()
 
