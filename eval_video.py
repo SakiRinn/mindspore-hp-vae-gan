@@ -36,7 +36,7 @@ def eval(opt, netG):
     if not hasattr(opt, 'Z_init_size'):
         initial_size = utils.get_scales_by_index(0, opt.scale_factor, opt.stop_scale, opt.img_size)
         initial_size = [int(initial_size * opt.ar), initial_size]
-        opt.Z_init_size = [opt.batch_size, opt.latent_dim, opt.td, *initial_size]
+        opt.Z_init_size = [1, opt.latent_dim, opt.td, *initial_size]
 
     # Parallel
     if opt.device == 'cuda':
@@ -177,7 +177,7 @@ if __name__ == '__main__':
         data_loader = DataLoader(dataset,
                                  shuffle=True,
                                  drop_last=True,
-                                 batch_size=opt.batch_size,
+                                 batch_size=1,
                                  num_workers=2)
 
         opt.dataset = dataset
