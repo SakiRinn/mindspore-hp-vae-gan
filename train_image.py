@@ -268,13 +268,13 @@ if __name__ == '__main__':
     parser.add_argument('--hflip', action='store_true', default=False, help='horizontal flip')
     parser.add_argument('--img-size', type=int, default=256)
     parser.add_argument('--stop-scale-time', type=int, default=-1)
-    parser.add_argument('--data-rep', type=int, default=1000, help='data repetition')
+    # parser.add_argument('--data-rep', type=int, default=1000, help='data repetition')
 
     # Main arguments
     parser.add_argument('--checkname', type=str, default='debug', help='check name')
     parser.add_argument('--mode', default='train', help='task to be done')
-    parser.add_argument('--batch-size', type=int, default=2, help='batch size')
     parser.add_argument('--print-interval', type=int, default=100, help='print interva')
+    # parser.add_argument('--batch-size', type=int, default=2, help='batch size')
     # parser.add_argument('--visualize', action='store_true', default=False, help='visualize using tensorboard')
     # parser.add_argument('--no-cuda', action='store_true', default=False, help='disables cuda')
 
@@ -283,8 +283,6 @@ if __name__ == '__main__':
 
     assert opt.vae_levels > 0
     assert opt.disc_loss_weight > 0
-    if opt.data_rep < opt.batch_size:
-        opt.data_rep = opt.batch_size
 
 
     ## Color

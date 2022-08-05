@@ -50,7 +50,7 @@ class SingleVideoDataset(ds.Dataset):
         # Horizontal flip (Until Kornia will handle videos
         hflip = random.random() < 0.5 if self.opt.hflip else False
         every = self.opt.sampling_rates[self.opt.fps_index]
-        
+
         self.generate_frames(opt.scale_idx)
         frames = self.frames[idx:idx + self.opt.fps_lcm + 1:every]
         frames = np.array(frames).transpose(2, 0, 1).astype(np.float32) \
@@ -88,7 +88,7 @@ class SingleVideoDataset(ds.Dataset):
         return frames_transformed
 
     def _generate_frames(self, scale_idx):
-        base_size = utils.get_scales_by_index(scale_idx, self.opt.scale_factor, 
+        base_size = utils.get_scales_by_index(scale_idx, self.opt.scale_factor,
                                               self.opt.stop_scale, self.opt.img_size)
         scaled_size = [int(base_size * self.opt.ar), base_size]
         self.opt.scaled_size = scaled_size
@@ -112,7 +112,6 @@ if __name__ == '__main__':
             self.video_path = '../data/vids/air_balloons.mp4'
             self.hflip = True
             self.img_size = 256
-            self.data_rep = 1000
             self.scale_factor = 0.75
             self.stop_scale = 9
             self.stop_scale_time = 9
@@ -120,7 +119,7 @@ if __name__ == '__main__':
             self.sampling_rates = [4, 3, 2, 1]
             self.start_frame = 0
             self.max_frames = 13
-            
+
         def get_fps_index(self):
             fps, td, fps_index = utils.get_fps_td_by_index(self.scale_idx, self)
             self.fps = fps
