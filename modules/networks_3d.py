@@ -539,7 +539,6 @@ if __name__ == '__main__':
             self.video_path = '../data/vids/air_balloons.mp4'
             self.hflip = True
             self.img_size = 256
-            self.data_rep = 1000
             self.scale_factor = 0.75
             self.stop_scale = 9
             self.stop_scale_time = 9

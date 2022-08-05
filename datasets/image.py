@@ -92,7 +92,6 @@ if __name__ == '__main__':
             self.image_path = '../data/imgs/air_balloons.jpg'
             self.hflip = True
             self.img_size = 256
-            self.data_rep = 1000
             self.scale_factor = 0.75
             self.stop_scale = 9
             self.scale_idx = 0
