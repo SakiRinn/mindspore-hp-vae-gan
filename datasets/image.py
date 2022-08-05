@@ -30,27 +30,27 @@ class SingleImageDataset:
         h, w = self.image_full_scale.shape[:2]
         opt.ar = h / w  # H2W
 
-        self.opt = opt
+        self._opt = opt
 
     def __len__(self):
-        return self.opt.data_rep
+        return self._opt.data_rep
 
     def __getitem__(self, idx):
-        hflip = random.random() < 0.5 if self.opt.hflip else False
+        hflip = random.random() < 0.5 if self._opt.hflip else False
 
-        images = self.generate_image(self.opt.scale_idx)
+        images = self.generate_image(self._opt.scale_idx)
         images = np.array(images).transpose(2, 0, 1).astype(np.float32) \
-                    if images.ndim == 3 else \
-                    np.array(images).transpose(0, 3, 1, 2).astype(np.float32)
+                 if images.ndim == 3 else \
+                 np.array(images).transpose(0, 3, 1, 2).astype(np.float32)
         images = images / 255  # Set range [0, 1]
         images_transformed = self._get_transformed_images(images, hflip)
 
         # Extract o-level index
-        if self.opt.scale_idx > 0:
+        if self._opt.scale_idx > 0:
             images_zero_scale = self.generate_image(0)
             images_zero_scale = np.array(images_zero_scale).transpose(2, 0, 1).astype(np.float32) \
-                                    if images_zero_scale.ndim == 3 else \
-                                    np.array(images_zero_scale).transpose(0, 3, 1, 2).astype(np.float32)
+                                if images_zero_scale.ndim == 3 else \
+                                np.array(images_zero_scale).transpose(0, 3, 1, 2).astype(np.float32)
             images_zero_scale = images_zero_scale / 255
             images_zero_scale_transformed = self._get_transformed_images(images_zero_scale, hflip)
 
@@ -70,10 +70,10 @@ class SingleImageDataset:
         return images_transformed
 
     def generate_image(self, scale_idx):
-        base_size = utils.get_scales_by_index(scale_idx, self.opt.scale_factor,
-                                              self.opt.stop_scale, self.opt.img_size)
-        scaled_size = [int(base_size * self.opt.ar), base_size]
-        self.opt.scaled_size = scaled_size
+        base_size = utils.get_scales_by_index(scale_idx, self._opt.scale_factor,
+                                              self._opt.stop_scale, self._opt.img_size)
+        scaled_size = [int(base_size * self._opt.ar), base_size]
+        self._opt.scaled_size = scaled_size
         img = cv2.resize(self.image_full_scale, tuple(scaled_size[::-1]))
         return img
 
@@ -93,7 +93,7 @@ if __name__ == '__main__':
             self.img_size = 256
             self.scale_factor = 0.75
             self.stop_scale = 9
-            self.scale_idx = 0
+            self.scale_idx = 1
             self.batch_size = 2
             self.data_rep = 1000
 

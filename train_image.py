@@ -326,11 +326,10 @@ if __name__ == '__main__':
     opt.Noise_Amps = []
 
     # Dataset
-    dataset_generator = SingleImageDataset(opt)
-    dataset = GeneratorDataset(dataset_generator, ['data', 'zero-scale data'], shuffle=True)
-    dataset = dataset.batch(opt.batch_size)
-    dataset = dataset.shuffle(4)
-    data_loader = dataset.create_tuple_iterator()
+    dataset = SingleImageDataset(opt)
+    data_loader = GeneratorDataset(dataset, ['data', 'zero-scale data'], shuffle=True)
+    data_loader = data_loader.batch(opt.batch_size)
+    data_loader = data_loader.shuffle(4)
 
     if opt.stop_scale_time == -1:
         opt.stop_scale_time = opt.stop_scale
@@ -367,7 +366,7 @@ if __name__ == '__main__':
 
     if opt.netG != '':
         if not os.path.isfile(opt.netG):
-            raise RuntimeError("=> no <G> checkpoint found at '{}'".format(opt.netG))
+            raise RuntimeError(f"=> no <G> checkpoint found at '{opt.netG}'")
         checkpoint = mindspore.load_checkpoint(opt.netG)
         opt.scale_idx = opt.saver.load_json('config.json')['scale']
         opt.resumed_idx = opt.saver.load_json('config.json')['scale']
