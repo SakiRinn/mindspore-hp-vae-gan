@@ -128,7 +128,7 @@ def train(opt, netG):
 
         initial_size = utils.get_scales_by_index(0, opt.scale_factor, opt.stop_scale, opt.img_size)
         initial_size = [int(initial_size * opt.ar), initial_size]
-        opt.Z_init_size = [1, opt.latent_dim, *initial_size]
+        opt.Z_init_size = [opt.batch_size, opt.latent_dim, *initial_size]
 
         noise_init = utils.generate_noise(size=opt.Z_init_size)
 
@@ -147,7 +147,7 @@ def train(opt, netG):
                     RMSE = nn.RMSELoss()(real, z_reconstruction)
                     RMSE = ops.stop_gradient(RMSE)
 
-                    opt.noise_amp = opt.noise_amp_init * RMSE / 1
+                    opt.noise_amp = opt.noise_amp_init * RMSE / opt.batch_size
                     opt.Noise_Amps[-1] = opt.noise_amp.asnumpy().item()
 
 
@@ -268,13 +268,13 @@ if __name__ == '__main__':
     parser.add_argument('--hflip', action='store_true', default=False, help='horizontal flip')
     parser.add_argument('--img-size', type=int, default=256)
     parser.add_argument('--stop-scale-time', type=int, default=-1)
-    # parser.add_argument('--data-rep', type=int, default=1000, help='data repetition')
+    parser.add_argument('--data-rep', type=int, default=1000, help='data repetition')
 
     # Main arguments
     parser.add_argument('--checkname', type=str, default='debug', help='check name')
     parser.add_argument('--mode', default='train', help='task to be done')
     parser.add_argument('--print-interval', type=int, default=100, help='print interva')
-    # parser.add_argument('--batch-size', type=int, default=2, help='batch size')
+    parser.add_argument('--batch-size', type=int, default=2, help='batch size')
     # parser.add_argument('--visualize', action='store_true', default=False, help='visualize using tensorboard')
     # parser.add_argument('--no-cuda', action='store_true', default=False, help='disables cuda')
 
@@ -283,6 +283,9 @@ if __name__ == '__main__':
 
     assert opt.vae_levels > 0
     assert opt.disc_loss_weight > 0
+
+    if opt.data_rep < opt.batch_size:
+        opt.data_rep = opt.batch_size
 
 
     ## Color
@@ -310,7 +313,7 @@ if __name__ == '__main__':
     # Manual seed
     if opt.manualSeed is None:
         opt.manualSeed = random.randint(1, 10000)
-    logging.info("Random Seed: {}".format(opt.manualSeed))
+    logging.info(f"Random Seed: {opt.manualSeed}")
     random.seed(opt.manualSeed)
     mindspore.set_seed(opt.manualSeed)
 
@@ -324,8 +327,8 @@ if __name__ == '__main__':
 
     # Dataset
     dataset_generator = SingleImageDataset(opt)
-    dataset = GeneratorDataset(dataset_generator, ['data', 'zero-scale data'],shuffle=True)
-    dataset = dataset.batch(1)
+    dataset = GeneratorDataset(dataset_generator, ['data', 'zero-scale data'], shuffle=True)
+    dataset = dataset.batch(opt.batch_size)
     dataset = dataset.shuffle(4)
     data_loader = dataset.create_tuple_iterator()
 
