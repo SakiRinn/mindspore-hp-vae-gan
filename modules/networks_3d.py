@@ -8,12 +8,16 @@ from mindspore import Tensor
 from mindspore import dtype as mstype
 from mindspore import nn
 from mindspore.common.initializer import Normal, Zero
+from mindspore import context
+
 
 import sys
-sys.path.insert(0, '..')
-sys.path.append('../datasets')
+sys.path.insert(0, '.')
 import datasets
 import utils
+
+context.set_context(device_target='Ascend', device_id=7, mode=context.PYNATIVE_MODE)
+
 
 matmul = ops.MatMul()
 exp = ops.Exp()

@@ -372,7 +372,7 @@ class GeneratorVAE_nb(nn.Cell):
 
 if __name__ == '__main__':
     from mindspore import context
-    context.set_context(device_target='Ascend', device_id=6, mode=context.PYNATIVE_MODE)
+    context.set_context(devices_id=5, mode=context.PYNATIVE_MODE)
     class Opt:
         def __init__(self):
             self.nfc = 64
