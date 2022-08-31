@@ -149,7 +149,7 @@ def train(opt, netG):
             real, _ = data
             real_zero = real
 
-        noise_init = utils.generate_noise(size=opt.Z_init_size)
+        noise_init = utils.generate_noise_size(opt.Z_init_size)
 
 
         ## Calculate noise_amp (First iteration)

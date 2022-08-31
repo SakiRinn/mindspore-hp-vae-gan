@@ -4,22 +4,29 @@ import mindspore.ops as ops
 from mindspore.common.initializer import Zero
 from mindspore import dtype as mstype
 import mindspore.nn.probability.distribution as msd
+from mindspore.ops import constexpr
 
 import numpy as np  # TODO: 替代三线性插值，待移除
 import torch
 import torch.nn.functional as F
 
-__all__ = ['interpolate', 'interpolate_3D', 'adjust_scales2image', 'generate_noise', 'get_scales_by_index',
+__all__ = ['interpolate', 'interpolate_3D', 'adjust_scales2image',
+           'generate_noise_size', 'generate_noise_ref','get_scales_by_index',
            'get_fps_td_by_index', 'get_fps_by_index', 'upscale', 'upscale_2d']
+
+
+def ceil(x):
+    y = int(x)
+    return y + 1 if x != y else y
 
 
 def interpolate(input, size=None):
     resize_bilinear = ops.ResizeBilinear(size, align_corners=True)    # TODO: align_corners
 
-    if input.dim() == 5:
+    if input.ndim == 5:
         b, c, t, h0, w0 = input.shape
         img = ops.Transpose()(input, (0, 2, 1, 3, 4)).reshape(input.shape[0] + input.shape[1],
-                                                        *input.shape[2:])  # (B+T)CHW
+                                                              *input.shape[2:])  # (B+T)CHW
         scaled = resize_bilinear(img)
         _, _, h1, w1 = scaled.shape
         scaled = ops.Transpose()(scaled.reshape(b, t, c, h1, w1), (0, 2, 1, 3, 4))
@@ -44,24 +51,18 @@ def interpolate_3D(input, size=None):
 
 
 def adjust_scales2image(size, opt):
-    opt.num_scales = math.ceil((math.log(math.pow(opt.min_size / size, 1), opt.scale_factor_init))) + 1
-    scale2stop = math.ceil(math.log(min([opt.max_size, size]) / size, opt.scale_factor_init))
+    opt.num_scales = ceil(ops.Log()(pow(opt.min_size / size, 1), opt.scale_factor_init)) + 1
+    scale2stop = ceil(ops.Log()(min([opt.max_size, size]) / size, opt.scale_factor_init))
     opt.stop_scale = opt.num_scales - scale2stop
     opt.scale1 = min(opt.max_size / size, 1)
-    opt.scale_factor = math.pow(opt.min_size / size, 1 / opt.stop_scale)
-    scale2stop = math.ceil(math.log(min([opt.max_size, size]) / size, opt.scale_factor_init))
+    opt.scale_factor = pow(opt.min_size / size, 1 / opt.stop_scale)
+    scale2stop = ceil(ops.Log()(min([opt.max_size, size]) / size, opt.scale_factor_init))
     opt.stop_scale = opt.num_scales - scale2stop
 
 
-def generate_noise(ref=None, size=None, type='normal', emb_size=None):
-    # Initiate noise without batch size
-    if ref is not None:
-        noise = Tensor(shape=ref.shape, init=Zero(), dtype=mstype.float32)
-    elif size is not None:
-        noise = Tensor(shape=size, init=Zero(), dtype=mstype.float32)
-    else:
-        exit(1)
-
+@constexpr
+def generate_noise_size(size=None, type='normal', emb_size=None):
+    noise = Tensor(shape=size, init=Zero(), dtype=mstype.float32)
     if type == 'normal':
         return msd.Normal(0, 1).prob(Tensor(shape=noise.shape, init=Zero(), dtype=mstype.float32))
     elif type == 'benoulli':
@@ -72,10 +73,19 @@ def generate_noise(ref=None, size=None, type='normal', emb_size=None):
         return ops.UniformInt()(size, 0, emb_size)
     return msd.Uniform(0, 1).prob(Tensor(shape=noise.shape, init=Zero(), dtype=mstype.float32))
 
+@constexpr
+def generate_noise_ref(ref, type='normal'):
+    noise = Tensor(shape=ref.shape, init=Zero(), dtype=mstype.float32)
+    if type == 'normal':
+        return msd.Normal(0, 1).prob(Tensor(shape=noise.shape, init=Zero(), dtype=mstype.float32))
+    elif type == 'benoulli':
+        return msd.Bernoulli(0.5).prob(Tensor(shape=noise.shape, init=Zero(), dtype=mstype.float32))
+    return msd.Uniform(0, 1).prob(Tensor(shape=noise.shape, init=Zero(), dtype=mstype.float32))
+
 
 def get_scales_by_index(index, scale_factor, stop_scale, img_size):
-    scale = math.pow(scale_factor, stop_scale - index)
-    s_size = math.ceil(scale * img_size)
+    scale = pow(scale_factor, stop_scale - index)
+    s_size = ceil(scale * img_size)
 
     return s_size
 
@@ -110,12 +120,12 @@ def upscale(video, index, opt):
     return vid_up
 
 
-def upscale_2d(image, index, opt):
+def upscale_2d(image, index, scale_factor, stop_scale, img_size, ar):
     if index <= 0:
         exit(1)
 
-    next_shape = get_scales_by_index(index, opt.scale_factor, opt.stop_scale, opt.img_size)
-    next_shape = [int(next_shape * opt.ar), next_shape]
+    next_shape = get_scales_by_index(index, scale_factor, stop_scale, img_size)
+    next_shape = [next_shape * ar, next_shape]
 
     # Video interpolation
     img_up = interpolate(image, size=next_shape)

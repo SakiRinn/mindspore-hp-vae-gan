@@ -38,7 +38,7 @@ def train(opt, netG):
     if not hasattr(opt, 'Z_init'):
         initial_size = utils.get_scales_by_index(0, opt.scale_factor, opt.stop_scale, opt.img_size)
         initial_size = [int(initial_size * opt.ar), initial_size]
-        opt.Z_init = utils.generate_noise(size=[1, 3, opt.td, *initial_size]).to(device)
+        opt.Z_init = utils.generate_noise_size([1, 3, opt.td, *initial_size]).to(device)
 
         opt.saver.save_checkpoint({'data': opt.Z_init}, 'Z_init.pth')
 
@@ -103,7 +103,7 @@ def train(opt, netG):
         else:
             real = data.to(opt.device)
 
-        noise_init = utils.generate_noise(ref=opt.Z_init)
+        noise_init = utils.generate_noise_ref(opt.Z_init)
 
         ############################
         # calculate noise_amp

@@ -104,13 +104,14 @@ def train(opt, netG):
         "postfix": True
     }
     epoch_iterator = tools.create_progressbar(**progressbar_args)
-    iterator = iter(opt.data_loader)
+
 
 
     #############
     ### TRAIN ###
     #############
     total_loss = 0
+    iterator = iter(opt.data_loader)
 
     for iteration in epoch_iterator:
         ## Initialize
@@ -130,7 +131,7 @@ def train(opt, netG):
         initial_size = [int(initial_size * opt.ar), initial_size]
         opt.Z_init_size = [opt.batch_size, opt.latent_dim, *initial_size]
 
-        noise_init = utils.generate_noise(size=opt.Z_init_size)
+        noise_init = utils.generate_noise_size(opt.Z_init_size)
 
 
         ## Calculate noise_amp (First iteration)
@@ -143,7 +144,7 @@ def train(opt, netG):
                     opt.Noise_Amps.append(opt.noise_amp)
                 else:
                     opt.Noise_Amps.append(0)
-                    z_reconstruction, _, _ = G_curr(real_zero, opt.Noise_Amps, randMode=False)
+                    z_reconstruction, _, _, _ = G_curr(real_zero, opt.Noise_Amps, randMode=False)
                     RMSE = nn.RMSELoss()(real, z_reconstruction)
                     RMSE = ops.stop_gradient(RMSE)
 
@@ -152,7 +153,7 @@ def train(opt, netG):
 
 
         ## Update parameters
-        generated, generated_vae, (mu, logvar) = G_curr(real_zero, opt.Noise_Amps, randMode=False)
+        generated, generated_vae, mu, logvar = G_curr(real_zero, opt.Noise_Amps, randMode=False)
         if opt.vae_levels >= opt.scale_idx + 1:
             # (1) Update VAE network
             G_loss.VAEMode(True)
