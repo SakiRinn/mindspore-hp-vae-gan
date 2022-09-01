@@ -12,7 +12,6 @@ from mindspore.common.initializer import Normal, Zero
 
 import sys
 sys.path.insert(0, '.')
-import datasets
 import utils
 
 
@@ -40,7 +39,7 @@ def reparam_bern(bern_shape):
     return Tensor(np.random.uniform(0, 1, size=bern_shape).astype('float32'))
 
 @constexpr
-def reparam_bern_pred(bern_shape):
+def reparam_pred_bern(bern_shape):
     return Tensor(np.random.binomial(1, 0.5, size=bern_shape).astype('float32'))
 
 
@@ -357,7 +356,7 @@ class GeneratorVAE_nb(nn.Cell):
                 z_vae_bern = log(bern + 1e-20) - log(-log(eps + 1e-20) + 1e-20)
             else:
                 z_vae_norm = reparam_pred(mu.shape)
-                z_vae_bern = reparam_bern_pred(bern.shape)
+                z_vae_bern = reparam_pred_bern(bern.shape)
         else:
             z_vae_norm = noise_init_norm
             z_vae_bern = noise_init_bern

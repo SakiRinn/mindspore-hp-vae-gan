@@ -52,8 +52,12 @@ class GWithLoss(nn.Cell):
         super(GWithLoss, self).__init__(auto_prefix=False)
         self._netD = netD
         self._netG = netG
-        self._opt = opt
+
         self.isVAE = False
+        self.rec_loss = opt.rec_loss
+        self.rec_weight = opt.rec_weight
+        self.kl_weight = opt.kl_weight
+        self.disc_loss_weight = opt.disc_loss_weight
 
     def VAEMode(self, flag):
         self.isVAE = flag
@@ -61,19 +65,19 @@ class GWithLoss(nn.Cell):
     def construct(self, real, real_zero, generated, generated_vae, mu, logvar, fake):
         if self.isVAE:
             ## (1) VAE loss
-            rec_vae_loss = self._opt.rec_loss(generated, real) + self._opt.rec_loss(generated_vae, real_zero)
+            rec_vae_loss = self.rec_loss(generated, real) + self.rec_loss(generated_vae, real_zero)
             kl_loss = kl_criterion(mu, logvar)
-            vae_loss = self._opt.rec_weight * rec_vae_loss + self._opt.kl_weight * kl_loss
+            vae_loss = self.rec_weight * rec_vae_loss + self.kl_weight * kl_loss
 
             return vae_loss
         else:
             ## (2) Generator loss
-            rec_loss = self._opt.rec_loss(generated, real)
-            errG_total = self._opt.rec_weight * rec_loss
+            rec_loss = self.rec_loss(generated, real)
+            errG_total = self.rec_weight * rec_loss
 
             # Train with Discriminator(fake)
             output = self._netD(fake)
-            errG = -output.mean() * self._opt.disc_loss_weight
+            errG = -output.mean() * self.disc_loss_weight
             errG_total += errG
 
             return errG_total

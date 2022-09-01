@@ -15,9 +15,7 @@ __all__ = ['interpolate', 'interpolate_3D', 'adjust_scales2image',
            'get_fps_td_by_index', 'get_fps_by_index', 'upscale', 'upscale_2d']
 
 
-def ceil(x):
-    y = int(x)
-    return y + 1 if x != y else y
+
 
 
 def interpolate(input, size=None):
@@ -51,15 +49,16 @@ def interpolate_3D(input, size=None):
 
 
 def adjust_scales2image(size, opt):
-    opt.num_scales = ceil(ops.Log()(pow(opt.min_size / size, 1), opt.scale_factor_init)) + 1
-    scale2stop = ceil(ops.Log()(min([opt.max_size, size]) / size, opt.scale_factor_init))
+    opt.num_scales = math.ceil((math.log(math.pow(opt.min_size / size, 1), opt.scale_factor_init))) + 1
+    scale2stop = math.ceil(math.log(min([opt.max_size, size]) / size, opt.scale_factor_init))
     opt.stop_scale = opt.num_scales - scale2stop
     opt.scale1 = min(opt.max_size / size, 1)
-    opt.scale_factor = pow(opt.min_size / size, 1 / opt.stop_scale)
-    scale2stop = ceil(ops.Log()(min([opt.max_size, size]) / size, opt.scale_factor_init))
+    opt.scale_factor = math.pow(opt.min_size / size, 1 / opt.stop_scale)
+    scale2stop = math.ceil(math.log(min([opt.max_size, size]) / size, opt.scale_factor_init))
     opt.stop_scale = opt.num_scales - scale2stop
 
 
+# TODO: 一起改
 @constexpr
 def generate_noise_size(size=None, type='normal', emb_size=None):
     noise = Tensor(shape=size, init=Zero(), dtype=mstype.float32)
@@ -73,6 +72,7 @@ def generate_noise_size(size=None, type='normal', emb_size=None):
         return ops.UniformInt()(size, 0, emb_size)
     return msd.Uniform(0, 1).prob(Tensor(shape=noise.shape, init=Zero(), dtype=mstype.float32))
 
+
 @constexpr
 def generate_noise_ref(ref, type='normal'):
     noise = Tensor(shape=ref.shape, init=Zero(), dtype=mstype.float32)
@@ -84,9 +84,12 @@ def generate_noise_ref(ref, type='normal'):
 
 
 def get_scales_by_index(index, scale_factor, stop_scale, img_size):
+    def ceil(x):
+        y = int(x)
+        return y + 1 if x != y else y
+
     scale = pow(scale_factor, stop_scale - index)
     s_size = ceil(scale * img_size)
-
     return s_size
 
 
