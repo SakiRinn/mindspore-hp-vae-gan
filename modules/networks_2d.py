@@ -36,14 +36,12 @@ def reparam_pred(mu_shape):
     return Tensor(np.random.normal(size=mu_shape).astype('float32'))
 
 @constexpr
-def reparam_bern(x):
-    log = ops.Log()
-    eps = msd.Uniform(0, 1).prob(Tensor(np.zeros_like(x)))
-    return log(x + 1e-20) - log(-log(eps + 1e-20) + 1e-20)
+def reparam_bern(bern_shape):
+    return Tensor(np.random.uniform(0, 1, size=bern_shape).astype('float32'))
 
 @constexpr
-def reparam_bern_pred(x):
-    return msd.Bernoulli(0.5).prob(Tensor(np.zeros_like(x)))
+def reparam_bern_pred(bern_shape):
+    return Tensor(np.random.binomial(1, 0.5, size=bern_shape).astype('float32'))
 
 
 class ConvBlock2D(nn.SequentialCell):
@@ -293,12 +291,20 @@ class GeneratorHPVAEGAN(nn.Cell):
 
 
 class GeneratorVAE_nb(nn.Cell):
-    def __init__(self, opt):
+    def __init__(self, opt, is_training=False):
         super(GeneratorVAE_nb, self).__init__()
 
         self.opt = opt
+        self.scale_factor = opt.scale_factor
+        self.stop_scale = opt.stop_scale
+        self.img_size = opt.img_size
+        self.ar = opt.ar
+        self.vae_levels = opt.vae_levels
+        self.train_all = opt.train_all
+
         N = int(opt.nfc)
         self.N = N
+        self.is_training = self.is_training = is_training
 
         self.encode = Encode2DVAE_nb(opt, out_dim=opt.latent_dim, num_blocks=opt.enc_blocks)
 
@@ -337,10 +343,21 @@ class GeneratorVAE_nb(nn.Cell):
             if len(self.body) <= sample_init[0]:
                 exit(1)
 
+        mu, logvar, bern = None, None, None
         if noise_init_norm is None:
             mu, logvar, bern = self.encode(video)
-            z_vae_norm = reparam(mu, logvar, self.training)
-            z_vae_bern = reparam_bern(bern, self.training)
+            if self.is_training:
+                # Norm
+                std = ops.Exp()(logvar * 0.5)
+                eps = reparam(std.shape)
+                z_vae_norm = ops.Mul()(eps, std) + mu
+                # Bern
+                log = ops.Log()
+                eps = reparam_bern(bern.shape)
+                z_vae_bern = log(bern + 1e-20) - log(-log(eps + 1e-20) + 1e-20)
+            else:
+                z_vae_norm = reparam_pred(mu.shape)
+                z_vae_bern = reparam_bern_pred(bern.shape)
         else:
             z_vae_norm = noise_init_norm
             z_vae_bern = noise_init_bern
@@ -353,17 +370,19 @@ class GeneratorVAE_nb(nn.Cell):
             x_prev_out = self.refinement_layers(0, vae_out, noise_amp, randMode)
 
         if noise_init_norm is None:
-            return x_prev_out, vae_out, (mu, logvar, bern)
+            return x_prev_out, vae_out, mu, logvar, bern
         else:
             return x_prev_out, vae_out
 
     def refinement_layers(self, start_idx, x_prev_out, noise_amp, randMode=False):
         for idx, block in enumerate(self.body[start_idx:], start_idx):
-            if self.opt.vae_levels == idx + 1:
+            if self.vae_levels == idx + 1:
                 x_prev_out = ops.stop_gradient(x_prev_out)
 
             # Upscale
-            x_prev_out_up = utils.upscale_2d(x_prev_out, idx + 1, self.opt)
+            x_prev_out_up = utils.upscale_2d(x_prev_out, idx + 1,
+                                             self.scale_factor, self.stop_scale,
+                                             self.img_size, self.ar)
 
             # Whether add noise
             if randMode:
@@ -402,9 +421,9 @@ if __name__ == '__main__':
             self.train_all = True
 
     opt = Opt()
-    model = GeneratorHPVAEGAN(opt)
+    model = GeneratorVAE_nb(opt)
     model.init_next_stage()
     from mindspore.common.initializer import One
     x = Tensor(shape=(64, 3, 200, 200), init=One(), dtype=mstype.float32)
     y = model(x, opt.Noise_Amps)
-    print(y[0].shape, y[1].shape, y[2].shape, y[3].shape)
+    print(y[0].shape, y[1].shape, y[2].shape, y[3].shape, y[4].shape)

@@ -154,6 +154,7 @@ def train(opt, netG):
 
         ## Update parameters
         generated, generated_vae, mu, logvar = G_curr(real_zero, opt.Noise_Amps, randMode=False)
+        # TODO: 前两个参数+元组, 目前无bern
         if opt.vae_levels >= opt.scale_idx + 1:
             # (1) Update VAE network
             G_loss.VAEMode(True)
