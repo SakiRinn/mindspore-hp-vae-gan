@@ -236,7 +236,11 @@ class GeneratorHPVAEGAN(nn.Cell):
                                           weight_init=Normal(0.02, 0.0), pad_mode='pad', has_bias=True))
             self.body.append(_first_stage)
         else:
-            self.body.append(copy.deepcopy(self.body[-1]))
+            _next_stage = copy.deepcopy(self.body[-1])
+            iterator = _next_stage.get_parameters()
+            for parameter in iterator:
+                parameter.name = parameter.name.replace('0.1.0', f'0.{len(self.body)}.0', 1)
+            self.body.append(_next_stage)
 
     def construct(self, video, noise_amp, noise_init=None, sample_init=None, randMode=False):
         if sample_init is not None:

@@ -6,8 +6,6 @@ from glob import glob
 import os
 import argparse
 
-transpose = ops.Transpose()
-
 
 def generate_images(opt):
     for exp_dir in opt.experiments:
@@ -15,7 +13,7 @@ def generate_images(opt):
         os.makedirs(os.path.join(exp_dir, opt.save_path), exist_ok=True)
         print('Generating dir {}'.format(os.path.join(exp_dir, opt.save_path)))
 
-        random_samples = transpose(mindspore.load_checkpoint(fakes_path), (0, 2, 3, 1))[:opt.max_samples]
+        random_samples = ops.Transpose()(mindspore.load_checkpoint(fakes_path), (0, 2, 3, 1))[:opt.max_samples]
         random_samples = (random_samples + 1) / 2
         random_samples = random_samples[:20] * 255
         random_samples = (random_samples.data.cpu().numpy()).astype(np.uint8)

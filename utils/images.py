@@ -15,10 +15,13 @@ __all__ = ['interpolate', 'interpolate_3D', 'adjust_scales2image',
            'get_fps_td_by_index', 'get_fps_by_index', 'upscale', 'upscale_2d']
 
 
-
+def ceil(x):
+    y = int(x)
+    return y + 1 if x != y else y
 
 
 def interpolate(input, size=None):
+    size = (int(size[0]), int(size[1]))
     resize_bilinear = ops.ResizeBilinear(size, align_corners=True)    # TODO: align_corners
 
     if input.ndim == 5:
@@ -58,36 +61,31 @@ def adjust_scales2image(size, opt):
     opt.stop_scale = opt.num_scales - scale2stop
 
 
-# TODO: 一起改
 @constexpr
 def generate_noise_size(size=None, type='normal', emb_size=None):
     noise = Tensor(shape=size, init=Zero(), dtype=mstype.float32)
     if type == 'normal':
-        return msd.Normal(0, 1).prob(Tensor(shape=noise.shape, init=Zero(), dtype=mstype.float32))
+        return Tensor(np.random.normal(size=noise.shape).astype('float32'))
     elif type == 'benoulli':
-        return msd.Bernoulli(0.5).prob(Tensor(shape=noise.shape, init=Zero(), dtype=mstype.float32))
+        return Tensor(np.random.binomial(1, 0.5, size=noise.shape).astype('float32'))
     elif type == 'int':
         if emb_size is None or size is None:
             exit(1)
         return ops.UniformInt()(size, 0, emb_size)
-    return msd.Uniform(0, 1).prob(Tensor(shape=noise.shape, init=Zero(), dtype=mstype.float32))
+    return Tensor(np.random.uniform(0, 1, size=noise.shape).astype('float32'))
 
 
 @constexpr
 def generate_noise_ref(ref, type='normal'):
     noise = Tensor(shape=ref.shape, init=Zero(), dtype=mstype.float32)
     if type == 'normal':
-        return msd.Normal(0, 1).prob(Tensor(shape=noise.shape, init=Zero(), dtype=mstype.float32))
+        return Tensor(np.random.normal(size=noise.shape).astype('float32'))
     elif type == 'benoulli':
-        return msd.Bernoulli(0.5).prob(Tensor(shape=noise.shape, init=Zero(), dtype=mstype.float32))
-    return msd.Uniform(0, 1).prob(Tensor(shape=noise.shape, init=Zero(), dtype=mstype.float32))
+        return Tensor(np.random.binomial(1, 0.5, size=noise.shape).astype('float32'))
+    return Tensor(np.random.uniform(0, 1, size=noise.shape).astype('float32'))
 
 
 def get_scales_by_index(index, scale_factor, stop_scale, img_size):
-    def ceil(x):
-        y = int(x)
-        return y + 1 if x != y else y
-
     scale = pow(scale_factor, stop_scale - index)
     s_size = ceil(scale * img_size)
     return s_size
