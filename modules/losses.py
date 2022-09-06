@@ -1,27 +1,20 @@
 import mindspore.nn as nn
 import mindspore.ops as ops
 
-import sys
-sys.path.insert(0, '.')
 from utils import calc_gradient_penalty
+from .networks_2d import GeneratorHPVAEGAN, WDiscriminator2D
 
-from networks_2d import GeneratorHPVAEGAN, WDiscriminator2D
 from mindspore import context
-context.set_context(mode=context.PYNATIVE_MODE)
-
-log = ops.Log()
-matmul = ops.MatMul()
-pow = ops.Pow()
-exp = ops.Exp()
-total_loss = 0
 
 
 def kl_criterion(mu, logvar):
-    KLD = -0.5 * (1 + logvar - pow(mu, 2) - exp(logvar))
+    KLD = -0.5 * (1 + logvar - ops.Pow()(mu, 2) - ops.Exp()(logvar))
     return KLD.mean()
 
 
 def kl_bern_criterion(x):
+    log = ops.Log()
+    matmul = ops.MatMul()
     KLD = matmul(x, log(x + 1e-20) - log(0.5)) + matmul(1 - x, log(1 - x + 1e-20) - log(1 - 0.5))
     return KLD.mean()
 
@@ -42,8 +35,10 @@ class DWithLoss(nn.Cell):
         output = self._netD(ops.stop_gradient(fake))
         errD_fake = output.mean()
 
-        # Total error for Discriminator
+        # Gradient penalty
         gradient_penalty = calc_gradient_penalty(self._netD, real, fake, self._opt.lambda_grad)
+
+        # Total error for Discriminator
         errD_total = errD_real + errD_fake + gradient_penalty
         return errD_total
 
@@ -57,9 +52,12 @@ class GWithLoss(nn.Cell):
         super(GWithLoss, self).__init__(auto_prefix=False)
         self._netD = netD
         self._netG = netG
-        self._opt = opt
-        self.total_loss = 0
+
         self.isVAE = False
+        self.rec_loss = opt.rec_loss
+        self.rec_weight = opt.rec_weight
+        self.kl_weight = opt.kl_weight
+        self.disc_loss_weight = opt.disc_loss_weight
 
     def VAEMode(self, flag):
         self.isVAE = flag
@@ -67,24 +65,22 @@ class GWithLoss(nn.Cell):
     def construct(self, real, real_zero, generated, generated_vae, mu, logvar, fake):
         if self.isVAE:
             ## (1) VAE loss
-            rec_vae_loss = self._opt.rec_loss(generated, real) + self._opt.rec_loss(generated_vae, real_zero)
+            rec_vae_loss = self.rec_loss(generated, real) + self.rec_loss(generated_vae, real_zero)
             kl_loss = kl_criterion(mu, logvar)
-            vae_loss = self._opt.rec_weight * rec_vae_loss + self._opt.kl_weight * kl_loss
+            vae_loss = self.rec_weight * rec_vae_loss + self.kl_weight * kl_loss
 
-            self.total_loss += vae_loss
+            return vae_loss
         else:
             ## (2) Generator loss
-            rec_loss = self._opt.rec_loss(generated, real)
-            errG_total = self._opt.rec_weight * rec_loss
+            rec_loss = self.rec_loss(generated, real)
+            errG_total = self.rec_weight * rec_loss
 
             # Train with Discriminator(fake)
             output = self._netD(fake)
-            errG = -output.mean() * self._opt.disc_loss_weight
+            errG = -output.mean() * self.disc_loss_weight
             errG_total += errG
 
-            self.total_loss += errG_total
-
-        return self.total_loss
+            return errG_total
 
     @property
     def backbone_network(self):
@@ -104,7 +100,6 @@ if __name__ == '__main__':
             self.image_path = '../data/imgs/air_balloons.jpg'
             self.hflip = True
             self.img_size = 256
-            self.data_rep = 1000
             self.scale_factor = 0.75
             self.stop_scale = 9
             self.scale_idx = 0

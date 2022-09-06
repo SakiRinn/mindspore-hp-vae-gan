@@ -26,7 +26,7 @@ def eval(opt, netG):
     if not hasattr(opt, 'Z_init_size'):
         initial_size = utils.get_scales_by_index(0, opt.scale_factor, opt.stop_scale, opt.img_size)
         initial_size = [int(initial_size * opt.ar), initial_size]
-        opt.Z_init_size = [opt.batch_size, opt.latent_dim, *initial_size]
+        opt.Z_init_size = [1, opt.latent_dim, *initial_size]
 
     G_curr = netG
 
@@ -56,7 +56,7 @@ def eval(opt, netG):
         else:
             real = data.to(opt.device)
 
-        noise_init = utils.generate_noise(size=opt.Z_init_size, device=opt.device)
+        noise_init = utils.generate_noise_size(opt.Z_init_size)
 
         # Update progress bar
         epoch_iterator.set_description('Scale [{}/{}], Iteration [{}/{}]'.format(
@@ -68,7 +68,7 @@ def eval(opt, netG):
             fake_var = []
             fake_vae_var = []
             for _ in range(opt.num_samples):
-                noise_init = utils.generate_noise(ref=noise_init)
+                noise_init = utils.generate_noise_ref(noise_init)
                 fake, fake_vae = G_curr(noise_init, opt.Noise_Amps, noise_init=noise_init, mode="rand")
                 fake_var.append(fake)
                 fake_vae_var.append(fake_vae)
@@ -162,7 +162,7 @@ if __name__ == '__main__':
         data_loader = DataLoader(dataset,
                                  shuffle=True,
                                  drop_last=True,
-                                 batch_size=opt.batch_size,
+                                 batch_size=1,
                                  num_workers=2)
         opt.dataset = dataset
         opt.data_loader = data_loader

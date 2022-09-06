@@ -17,32 +17,25 @@ import mindspore.nn as nn
 import mindspore.ops as ops
 from mindspore.dataset import GeneratorDataset
 
-context.set_context(mode=context.PYNATIVE_MODE, devices_id=3)
-
 
 def train(opt, netG):
     ############
     ### INIT ###
     ############
 
-    ## Discriminator
+    ## Current Networks
     D_curr = getattr(networks_2d, opt.discriminator)(opt)
+    G_curr = netG
 
     if opt.vae_levels < opt.scale_idx + 1:
         # Load parameters for discriminator
         if (opt.netG != '') and (opt.resumed_idx == opt.scale_idx):
-            D_curr.load_param_into_net(
-                mindspore.load_checkpoint('{}/netD_{}.ckpt'\
-                                          .format(opt.resume_dir, opt.scale_idx - 1))['state_dict']
-            )
+            mindspore.load_checkpoint(f'{opt.resume_dir}/netD_{opt.scale_idx - 1}.ckpt', D_curr)
         elif opt.vae_levels < opt.scale_idx:
-            D_curr.load_param_into_net(
-                mindspore.load_checkpoint('{}/netD_{}.ckpt'\
-                                          .format(opt.saver.experiment_dir, opt.scale_idx - 1))['state_dict']
-            )
+            mindspore.load_checkpoint(f'{opt.saver.experiment_dir}/netD_{opt.scale_idx - 1}.ckpt', D_curr)
 
         # Optimizer
-        optimizerD = nn.Adam(D_curr.get_parameters(), opt.lr_d, beta1=opt.beta1, beta2=0.999)
+        optimizerD = nn.Adam(D_curr.trainable_params(), opt.lr_d, beta1=opt.beta1, beta2=0.999)
         # With-loss cell
         D_loss = DWithLoss(opt, D_curr, G_curr)
         # Train-one-step cell
@@ -53,47 +46,45 @@ def train(opt, netG):
     parameter_list = []
 
     if not opt.train_all:
-        # (1) train all
+        # (1) NOT train all
         if opt.vae_levels < opt.scale_idx + 1:
             train_depth = min(opt.train_depth, len(netG.body) - opt.vae_levels + 1)
             parameter_list += [
-                {"params": block.get_parameters(),
+                {"params": block.trainable_params(),
                  "lr": opt.lr_g * (opt.lr_scale ** (len(netG.body[-train_depth:]) - 1 - idx))}
                 for idx, block in enumerate(netG.body[-train_depth:])
             ]
         else:
-            parameter_list += [{"params": netG.encode.get_parameters(),
+            parameter_list += [{"params": netG.encode.trainable_params(),
                                 "lr": opt.lr_g * (opt.lr_scale ** opt.scale_idx)},
-                               {"params": netG.decoder.get_parameters(),
+                               {"params": netG.decoder.trainable_params(),
                                 "lr": opt.lr_g * (opt.lr_scale ** opt.scale_idx)}
             ]
             parameter_list += [
-                {"params": block.get_parameters(),
+                {"params": block.trainable_params(),
                  "lr": opt.lr_g * (opt.lr_scale ** (len(netG.body[-opt.train_depth:]) - 1 - idx))}
                 for idx, block in enumerate(netG.body[-opt.train_depth:])
             ]
     else:
-        # (2) NOT train all
+        # (2) train all
         if len(netG.body) < opt.train_depth:
-            parameter_list += [{"params": netG.encode.get_parameters(),
+            parameter_list += [{"params": netG.encode.trainable_params(),
                                 "lr": opt.lr_g * (opt.lr_scale ** opt.scale_idx)},
-                               {"params": netG.decoder.get_parameters(),
+                               {"params": netG.decoder.trainable_params(),
                                 "lr": opt.lr_g * (opt.lr_scale ** opt.scale_idx)}
             ]
             parameter_list += [
-                {"params": block.get_parameters(),
+                {"params": block.trainable_params(),
                  "lr": opt.lr_g * (opt.lr_scale ** (len(netG.body) - 1 - idx))}
                 for idx, block in enumerate(netG.body)
             ]
         else:
             parameter_list += [
-                {"params": block.get_parameters(),
+                {"params": block.trainable_params(),
                  "lr": opt.lr_g * (opt.lr_scale ** (len(netG.body[-opt.train_depth:]) - 1 - idx))}
                 for idx, block in enumerate(netG.body[-opt.train_depth:])
             ]
 
-    # Current generator
-    G_curr = netG
     # Optimizer
     optimizerG = ClippedAdam(opt, parameter_list, opt.lr_g, beta1=opt.beta1, beta2=0.999)
     # With-loss cell
@@ -113,12 +104,15 @@ def train(opt, netG):
         "postfix": True
     }
     epoch_iterator = tools.create_progressbar(**progressbar_args)
-    iterator = iter(opt.data_loader)
+
 
 
     #############
     ### TRAIN ###
     #############
+    total_loss = 0
+    iterator = iter(opt.data_loader)
+
     for iteration in epoch_iterator:
         ## Initialize
         try:
@@ -137,7 +131,7 @@ def train(opt, netG):
         initial_size = [int(initial_size * opt.ar), initial_size]
         opt.Z_init_size = [opt.batch_size, opt.latent_dim, *initial_size]
 
-        noise_init = utils.generate_noise(size=opt.Z_init_size)
+        noise_init = utils.generate_noise_size(opt.Z_init_size)
 
 
         ## Calculate noise_amp (First iteration)
@@ -150,20 +144,21 @@ def train(opt, netG):
                     opt.Noise_Amps.append(opt.noise_amp)
                 else:
                     opt.Noise_Amps.append(0)
-                    z_reconstruction, _, _ = G_curr(real_zero, opt.Noise_Amps, randMode=False)
+                    z_reconstruction, _, _, _ = G_curr(real_zero, opt.Noise_Amps, randMode=False)
                     RMSE = nn.RMSELoss()(real, z_reconstruction)
                     RMSE = ops.stop_gradient(RMSE)
 
-                    opt.noise_amp = opt.noise_amp_init * RMSE.item() / opt.batch_size
-                    opt.Noise_Amps[-1] = opt.noise_amp
+                    opt.noise_amp = opt.noise_amp_init * RMSE / opt.batch_size
+                    opt.Noise_Amps[-1] = opt.noise_amp.asnumpy().item()
 
 
         ## Update parameters
-        generated, generated_vae, (mu, logvar) = G_curr(real_zero, opt.Noise_Amps, randMode=False)
+        generated, generated_vae, mu, logvar = G_curr(real_zero, opt.Noise_Amps, randMode=False)
+        # TODO: 前两个参数+元组, 目前无bern
         if opt.vae_levels >= opt.scale_idx + 1:
             # (1) Update VAE network
             G_loss.VAEMode(True)
-            G_train(real, real_zero, generated, generated_vae, mu, logvar, Tensor(0))
+            total_loss += G_train(real, real_zero, generated, generated_vae, mu, logvar, 0)
         else:
             # (2) Update distriminator: maximize D(x) + D(G(z))
             fake, _ = G_curr(noise_init, opt.Noise_Amps, noise_init=noise_init, randMode=True)
@@ -171,7 +166,7 @@ def train(opt, netG):
 
             # (3) Update generator: maximize D(G(z)) (After grad clipping)
             G_loss.VAEMode(False)
-            G_train(real, real_zero, generated, generated_vae, mu, logvar, fake)
+            total_loss += G_train(real, real_zero, generated, generated_vae, mu, logvar, fake)
 
 
         ## Update progress bar
@@ -219,23 +214,15 @@ def train(opt, netG):
 
 
     ## Save data
-    opt.saver.save_checkpoint({'data': opt.Noise_Amps}, 'Noise_Amps.ckpt')
-    opt.saver.save_checkpoint({
-        'scale': opt.scale_idx,
-        'parameters_dict': netG.parameters_dict(),
-        'optimizer': optimizerG.parameters_dict(),
-        'noise_amps': opt.Noise_Amps,
-    }, 'netG.ckpt')
+    opt.saver.save_json({'noise_amps': opt.Noise_Amps,'scale': opt.scale_idx}, 'config.json')
+    opt.saver.save_checkpoint(G_curr, 'netG.ckpt')
     if opt.vae_levels < opt.scale_idx + 1:
-        opt.saver.save_checkpoint({
-            'scale': opt.scale_idx,
-            'parameters_dict': D_curr.module.parameters_dict()
-                          if opt.device != 'CPU' else D_curr.parameters_dict(),
-            'optimizer': optimizerD.parameters_dict(),
-        }, 'netD_{}.ckpt'.format(opt.scale_idx))
+        opt.saver.save_checkpoint(D_curr, f'netD_{opt.scale_idx}.ckpt')
 
 
 if __name__ == '__main__':
+    context.set_context(mode=context.GRAPH_MODE, device_id=5)
+
     ## Parser
     parser = argparse.ArgumentParser()
 
@@ -286,18 +273,19 @@ if __name__ == '__main__':
     parser.add_argument('--data-rep', type=int, default=1000, help='data repetition')
 
     # Main arguments
-    parser.add_argument('--checkname', type=str, default='DEBUG', help='check name')
+    parser.add_argument('--checkname', type=str, default='debug', help='check name')
     parser.add_argument('--mode', default='train', help='task to be done')
-    parser.add_argument('--batch-size', type=int, default=2, help='batch size')
     parser.add_argument('--print-interval', type=int, default=100, help='print interva')
+    parser.add_argument('--batch-size', type=int, default=2, help='batch size')
     # parser.add_argument('--visualize', action='store_true', default=False, help='visualize using tensorboard')
-    parser.add_argument('--no-cuda', action='store_true', default=False, help='disables cuda')
+    # parser.add_argument('--no-cuda', action='store_true', default=False, help='disables cuda')
 
     parser.set_defaults(hflip=False)
     opt = parser.parse_args()
 
     assert opt.vae_levels > 0
     assert opt.disc_loss_weight > 0
+
     if opt.data_rep < opt.batch_size:
         opt.data_rep = opt.batch_size
 
@@ -317,10 +305,6 @@ if __name__ == '__main__':
     # opt.summary = utils.TensorboardSummary(opt.saver.experiment_dir)
     logger.configure_logging(os.path.abspath(os.path.join(opt.saver.experiment_dir, 'logbook.txt')))
 
-    # Device
-    device = mindspore.get_context('device_target')
-    opt.device = device
-
     # Config
     opt.noise_amp_init = opt.noise_amp
     opt.scale_factor_init = opt.scale_factor
@@ -331,7 +315,7 @@ if __name__ == '__main__':
     # Manual seed
     if opt.manualSeed is None:
         opt.manualSeed = random.randint(1, 10000)
-    logging.info("Random Seed: {}".format(opt.manualSeed))
+    logging.info(f"Random Seed: {opt.manualSeed}")
     random.seed(opt.manualSeed)
     mindspore.set_seed(opt.manualSeed)
 
@@ -344,11 +328,10 @@ if __name__ == '__main__':
     opt.Noise_Amps = []
 
     # Dataset
-    dataset_generator = SingleImageDataset(opt)
-    dataset = GeneratorDataset(dataset_generator, ['data', 'zero-scale data'],shuffle=True)
-    dataset = dataset.batch(opt.batch_size)
-    dataset = dataset.shuffle(4)
-    data_loader = dataset.create_tuple_iterator()
+    dataset = SingleImageDataset(opt)
+    data_loader = GeneratorDataset(dataset, ['data', 'zero-scale data'], shuffle=True)
+    data_loader = data_loader.batch(opt.batch_size)
+    data_loader = data_loader.shuffle(4)
 
     if opt.stop_scale_time == -1:
         opt.stop_scale_time = opt.stop_scale
@@ -357,7 +340,7 @@ if __name__ == '__main__':
     opt.data_loader = data_loader
 
 
-    ## Load
+    ## Logging
     with open(os.path.join(opt.saver.experiment_dir, 'args.txt'), 'w') as args_file:
         for argument, value in sorted(vars(opt).items()):
             if type(value) in (str, int, float, tuple, list, bool):
@@ -385,16 +368,16 @@ if __name__ == '__main__':
 
     if opt.netG != '':
         if not os.path.isfile(opt.netG):
-            raise RuntimeError("=> no <G> checkpoint found at '{}'".format(opt.netG))
+            raise RuntimeError(f"=> no <G> checkpoint found at '{opt.netG}'")
         checkpoint = mindspore.load_checkpoint(opt.netG)
-        opt.scale_idx = checkpoint['scale']
-        opt.resumed_idx = checkpoint['scale']
+        opt.scale_idx = opt.saver.load_json('config.json')['scale']
+        opt.resumed_idx = opt.saver.load_json('config.json')['scale']
         opt.resume_dir = '/'.join(opt.netG.split('/')[:-1])
         for _ in range(opt.scale_idx):
             netG.init_next_stage()
-        netG.load_param_into_net(checkpoint['state_dict'])
+        netG.load_checkpoint(opt.netG)
         # Noise Amp
-        opt.Noise_Amps = mindspore.load_checkpoint(os.path.join(opt.resume_dir, 'Noise_Amps.ckpt'))['data']
+        opt.Noise_Amps = opt.saver.load_json('config.json')['noise_amps']
     else:
         opt.resumed_idx = -1
 

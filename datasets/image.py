@@ -7,9 +7,9 @@ import os
 from mindspore.dataset.vision.c_transforms import Normalize
 import mindspore.dataset as ds
 
+import sys
+sys.path.insert(0, '.')
 import utils
-
-normalize = Normalize(mean=[0.5], std=[0.5])
 
 
 class SingleImageDataset:
@@ -30,28 +30,27 @@ class SingleImageDataset:
         h, w = self.image_full_scale.shape[:2]
         opt.ar = h / w  # H2W
 
-        self._opt = opt
+        self.opt = opt
 
     def __len__(self):
-        # return self._opt.data_rep
-        return 1
+        return self.opt.data_rep
 
     def __getitem__(self, idx):
-        hflip = random.random() < 0.5 if self._opt.hflip else False
+        hflip = random.random() < 0.5 if self.opt.hflip else False
 
-        images = self.generate_image(self._opt.scale_idx)
+        images = self.generate_image(self.opt.scale_idx)
         images = np.array(images).transpose(2, 0, 1).astype(np.float32) \
-                    if images.ndim == 3 else \
-                    np.array(images).transpose(0, 3, 1, 2).astype(np.float32)
+                 if images.ndim == 3 else \
+                 np.array(images).transpose(0, 3, 1, 2).astype(np.float32)
         images = images / 255  # Set range [0, 1]
         images_transformed = self._get_transformed_images(images, hflip)
 
         # Extract o-level index
-        if self._opt.scale_idx > 0:
+        if self.opt.scale_idx > 0:
             images_zero_scale = self.generate_image(0)
             images_zero_scale = np.array(images_zero_scale).transpose(2, 0, 1).astype(np.float32) \
-                                    if images_zero_scale.ndim == 3 else \
-                                    np.array(images_zero_scale).transpose(0, 3, 1, 2).astype(np.float32)
+                                if images_zero_scale.ndim == 3 else \
+                                np.array(images_zero_scale).transpose(0, 3, 1, 2).astype(np.float32)
             images_zero_scale = images_zero_scale / 255
             images_zero_scale_transformed = self._get_transformed_images(images_zero_scale, hflip)
 
@@ -66,15 +65,15 @@ class SingleImageDataset:
         if hflip:
             images_transformed = np.flip(images_transformed, -1)
         # Normalize
-        images_transformed = normalize(images_transformed)
+        images_transformed = Normalize(mean=[0.5], std=[0.5])(images_transformed)
 
         return images_transformed
 
     def generate_image(self, scale_idx):
-        base_size = utils.get_scales_by_index(scale_idx, self._opt.scale_factor,
-                                              self._opt.stop_scale, self._opt.img_size)
-        scaled_size = [int(base_size * self._opt.ar), base_size]
-        self._opt.scaled_size = scaled_size
+        base_size = utils.get_scales_by_index(scale_idx, self.opt.scale_factor,
+                                              self.opt.stop_scale, self.opt.img_size)
+        scaled_size = [int(base_size * self.opt.ar), base_size]
+        self.opt.scaled_size = scaled_size
         img = cv2.resize(self.image_full_scale, tuple(scaled_size[::-1]))
         return img
 
@@ -89,18 +88,21 @@ if __name__ == '__main__':
             self.latent_dim = 128
             self.enc_blocks = 2
             self.padd_size = 1
-            self.image_path = '../data/imgs/air_balloons.jpg'
+            self.image_path = './data/imgs/air_balloons.jpg'
             self.hflip = True
             self.img_size = 256
-            self.data_rep = 1000
             self.scale_factor = 0.75
             self.stop_scale = 9
-            self.scale_idx = 0
+            self.scale_idx = 1
+            self.batch_size = 2
+            self.data_rep = 1000
 
     opt = Opt()
     # 实例化数据集类
     dataset_generator = SingleImageDataset(opt)
     dataset = ds.GeneratorDataset(dataset_generator, ['data1', 'data2'])
+    dataset = dataset.batch(opt.batch_size)
+    dataset = dataset.shuffle(4)
     dl = dataset.create_dict_iterator()
     # 打印数据条数
     print(next(dl))
