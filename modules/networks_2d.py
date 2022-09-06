@@ -13,12 +13,15 @@ sys.path.insert(0, '.')
 import datasets
 import utils
 
+from mindspore import context
+context.set_context(device_id=5, mode=context.PYNATIVE_MODE)
+
 matmul = ops.MatMul()
 exp = ops.Exp()
 log = ops.Log()
 tanh = ops.Tanh()
 sigmoid = ops.Sigmoid()
-bernoulli = msd.Bernoulli(0.5)
+bernoulli = msd.Bernoulli(probs=0.5)
 uniform = msd.Uniform(0, 1)
 
 
@@ -371,8 +374,6 @@ class GeneratorVAE_nb(nn.Cell):
 
 
 if __name__ == '__main__':
-    from mindspore import context
-    context.set_context(devices_id=5, mode=context.PYNATIVE_MODE)
     class Opt:
         def __init__(self):
             self.nfc = 64
@@ -393,7 +394,6 @@ if __name__ == '__main__':
             self.Noise_Amps = [1, 1, 1]
 
     opt = Opt()
-    dataset = datasets.SingleImageDataset(opt)
     model = GeneratorHPVAEGAN(opt)
     model.init_next_stage()
     from mindspore.common.initializer import One
