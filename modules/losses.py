@@ -22,10 +22,13 @@ def kl_bern_criterion(x):
 class DWithLoss(nn.Cell):
     def __init__(self, opt, netD, netG):
         super(DWithLoss, self).__init__(auto_prefix=False)
+        self._opt = opt
+
         self._netD = netD
         self._netG = netG
-        self._opt = opt
-        self.fake = 0
+
+        self.fake = None
+        self.gradient_penalty = 0
 
     def construct(self, real, noise_init, noist_amps):
         fake, _ = self._netG(noise_init, noist_amps, noise_init=noise_init, isRandom=True)
@@ -42,10 +45,9 @@ class DWithLoss(nn.Cell):
 
         # Gradient penalty
         # gradient_penalty = calc_gradient_penalty(self.backbone_network, real, fake, self._opt.lambda_grad)
-        gradient_penalty = 0    # TODO: 改回去
 
         # Total error for Discriminator
-        errD_total = errD_real + errD_fake + gradient_penalty
+        errD_total = errD_real + errD_fake + self.gradient_penalty
         return errD_total
 
     @property
@@ -64,9 +66,14 @@ class GWithLoss(nn.Cell):
         self.kl_weight = opt.kl_weight
         self.disc_loss_weight = opt.disc_loss_weight
 
+        self.generated = None
+        self.generated_vae = None
+
     def construct(self, real, real_zero, fake, noise_amps, isVAE=False):
         fake = ops.stop_gradient(fake)
         generated, generated_vae, mu, logvar = self.backbone_network(real_zero, noise_amps, isRandom=False)
+        self.generated = generated
+        self.generated_vae = generated_vae
         # TODO: 前两个参数+元组, 目前无bern
         if isVAE:
             ## (1) VAE loss

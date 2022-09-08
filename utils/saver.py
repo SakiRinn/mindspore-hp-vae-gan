@@ -76,6 +76,8 @@ class ImageSaver(object):
         if not os.path.exists(self.eval_dir):
             os.makedirs(self.eval_dir)
 
+        self.iteration = 0
+
     def save_checkpoint(self, cell, filename='checkpoint.ckpt'):
         filename = os.path.join(self.experiment_dir, filename)
         mindspore.save_checkpoint(cell, filename)
@@ -94,3 +96,12 @@ class ImageSaver(object):
         with open(filename,'r+') as f:
             obj = json.load(f)
         return obj
+
+    def save_images(self, img, filename):
+        filename = os.path.join(self.experiment_dir, filename)
+        img = img.asnumpy().squeeze(0).astype('uint8')
+        if img.ndim != 3:
+            return
+        if not os.path.exists(self.experiment_dir + '/images'):
+            os.makedirs(self.experiment_dir + '/images')
+        cv2.imwrite(filename, img)

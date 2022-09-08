@@ -86,7 +86,7 @@ def train(opt, netG):
             ]
 
     # Optimizer
-    optimizerG = nn.Adam(G_curr.trainable_params(), opt.lr_g, beta1=opt.beta1, beta2=0.999)
+    optimizerG = ClippedAdam(opt, parameter_list, opt.lr_g, beta1=opt.beta1, beta2=0.999)
     # With-loss cell
     G_loss = GWithLoss(opt, D_curr, G_curr)
     # Train-one-step cell
@@ -153,6 +153,7 @@ def train(opt, netG):
 
 
         ## Update parameters
+        fake, generated, generated_vae = None, None, None
         if opt.vae_levels >= opt.scale_idx + 1:
             # (1) Update VAE network
             curG_loss = G_train(real, real_zero, 0, opt.Noise_Amps, True)
@@ -162,6 +163,8 @@ def train(opt, netG):
             fake = D_loss.fake
             # (3) Update generator: maximize D(G(z)) (After grad clipping)
             curG_loss = G_train(real, real_zero, fake, opt.Noise_Amps, False)
+            generated = G_loss.generated
+            generated_vae = G_loss.generated_vae
         total_loss += curG_loss
 
 
@@ -173,8 +176,33 @@ def train(opt, netG):
 
 
         ## Log
-        if iteration % 100 == 0:
-            logging.info(f'Scale {opt.scale_idx + 1}/ Iter {iteration} - noise_amp: {opt.noise_amp}, loss: {curG_loss}')
+        if (iteration + 1) % opt.print_interval == 0:
+            if opt.vae_levels >= opt.scale_idx + 1:
+                logging.info(f'[Scale {opt.scale_idx + 1}/Iter {iteration}] Noise amp: {opt.noise_amp}, Gloss: {curG_loss}')
+            else:
+                logging.info(f'[Scale {opt.scale_idx + 1}/Iter {iteration}] Noise amp: {opt.noise_amp}, Gloss: {curG_loss}, Dloss: {curD_loss}')
+
+            if opt.visualize:
+                opt.saver.save_images(real, 'real.jpg')
+
+                if opt.vae_levels < opt.scale_idx + 1:
+                    opt.saver.save_images(generated, f'generated_{iteration}.jpg')
+                    opt.saver.save_images(generated_vae, f'generated_vae_{iteration}.jpg')
+
+                if iteration % opt.image_interval == 0:
+                    fake_var = []
+                    fake_vae_var = []
+                    for _ in range(3):
+                        noise_init = utils.generate_noise_ref(noise_init)
+                        noise_init = ops.stop_gradient(noise_init)
+                        fake, fake_vae = G_curr(noise_init, opt.Noise_Amps, noise_init=noise_init, isRandom=True)
+                        fake_var.append(fake)
+                        fake_vae_var.append(fake_vae)
+                    fake_var = ops.Concat()(fake_var)
+                    fake_vae_var = ops.Concat()(fake_vae_var)
+                    opt.saver.save_images(fake_var, f'fake_var_{iteration}.jpg')
+                    opt.saver.save_images(fake_vae_var, f'fake_vae_var{iteration}.jpg')
+
 
         ## Virsualize with Tensorboard
         # if opt.visualize:
@@ -214,7 +242,7 @@ def train(opt, netG):
 
 
     ## Save data
-    opt.saver.save_json({'noise_amps': opt.Noise_Amps,'scale': opt.scale_idx}, 'config.json')
+    opt.saver.save_json({'noise_amps': opt.Noise_Amps, 'scale_idx': opt.scale_idx}, 'config.json')
     opt.saver.save_checkpoint(G_curr, 'netG.ckpt')
     if opt.vae_levels < opt.scale_idx + 1:
         opt.saver.save_checkpoint(D_curr, f'netD_{opt.scale_idx}.ckpt')
@@ -275,9 +303,10 @@ if __name__ == '__main__':
     # Main arguments
     parser.add_argument('--checkname', type=str, default='debug', help='check name')
     parser.add_argument('--mode', default='train', help='task to be done')
-    parser.add_argument('--print-interval', type=int, default=100, help='print interva')
+    parser.add_argument('--print-interval', type=int, default=10, help='print interval')
+    parser.add_argument('--image-interval', type=int, default=100, help='image interval')
     parser.add_argument('--batch-size', type=int, default=2, help='batch size')
-    # parser.add_argument('--visualize', action='store_true', default=False, help='visualize using tensorboard')
+    parser.add_argument('--visualize', action='store_true', default=True, help='visualize using tensorboard')
     # parser.add_argument('--no-cuda', action='store_true', default=False, help='disables cuda')
 
     parser.set_defaults(hflip=False)
