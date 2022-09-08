@@ -25,10 +25,12 @@ class DWithLoss(nn.Cell):
         self._netD = netD
         self._netG = netG
         self._opt = opt
+        self.fake = 0
 
     def construct(self, real, noise_init, noist_amps):
         fake, _ = self._netG(noise_init, noist_amps, noise_init=noise_init, isRandom=True)
         fake = ops.stop_gradient(fake)
+        self.fake = fake
 
         # Train with real
         output_real = self.backbone_network(real)
@@ -44,7 +46,7 @@ class DWithLoss(nn.Cell):
 
         # Total error for Discriminator
         errD_total = errD_real + errD_fake + gradient_penalty
-        return errD_total, fake
+        return errD_total
 
     @property
     def backbone_network(self):
