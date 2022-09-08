@@ -99,7 +99,7 @@ class ImageSaver(object):
 
     def save_images(self, img, filename):
         filename = os.path.join(self.experiment_dir, filename)
-        img = img.asnumpy().squeeze(0).astype('uint8')
+        img = img.asnumpy().squeeze().astype('uint8')
         if img.ndim != 3:
             return
         if not os.path.exists(self.experiment_dir + '/images'):

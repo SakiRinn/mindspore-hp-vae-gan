@@ -16,7 +16,7 @@ def generate_images(opt):
         random_samples = ops.Transpose()(mindspore.load_checkpoint(fakes_path), (0, 2, 3, 1))[:opt.max_samples]
         random_samples = (random_samples + 1) / 2
         random_samples = random_samples[:20] * 255
-        random_samples = (random_samples.data.cpu().numpy()).astype(np.uint8)
+        random_samples = (random_samples.data.asnumpy()).astype(np.uint8)
         for i, sample in enumerate(random_samples):
             imageio.imwrite(os.path.join(exp_dir, opt.save_path, 'fake_{}.png'.format(i)), sample)
 

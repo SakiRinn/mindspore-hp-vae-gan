@@ -153,7 +153,6 @@ def train(opt, netG):
 
 
         ## Update parameters
-        fake, generated, generated_vae = None, None, None
         if opt.vae_levels >= opt.scale_idx + 1:
             # (1) Update VAE network
             curG_loss = G_train(real, real_zero, 0, opt.Noise_Amps, True)
@@ -163,8 +162,6 @@ def train(opt, netG):
             fake = D_loss.fake
             # (3) Update generator: maximize D(G(z)) (After grad clipping)
             curG_loss = G_train(real, real_zero, fake, opt.Noise_Amps, False)
-            generated = G_loss.generated
-            generated_vae = G_loss.generated_vae
         total_loss += curG_loss
 
 
@@ -185,9 +182,9 @@ def train(opt, netG):
             if opt.visualize:
                 opt.saver.save_images(real, 'real.jpg')
 
-                if opt.vae_levels < opt.scale_idx + 1:
-                    opt.saver.save_images(generated, f'generated_{iteration}.jpg')
-                    opt.saver.save_images(generated_vae, f'generated_vae_{iteration}.jpg')
+                # if opt.vae_levels < opt.scale_idx + 1:
+                #     opt.saver.save_images(generated, f'generated_{iteration}.jpg')
+                #     opt.saver.save_images(generated_vae, f'generated_vae_{iteration}.jpg')
 
                 if iteration % opt.image_interval == 0:
                     fake_var = []
@@ -249,7 +246,7 @@ def train(opt, netG):
 
 
 if __name__ == '__main__':
-    context.set_context(mode=1, device_id=4)
+    context.set_context(mode=0, device_id=4)
 
     ## Parser
     parser = argparse.ArgumentParser()

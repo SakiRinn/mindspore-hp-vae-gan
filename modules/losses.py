@@ -1,10 +1,9 @@
 import mindspore.nn as nn
 import mindspore.ops as ops
+from mindspore import Tensor
 
 from utils import calc_gradient_penalty
 from .networks_2d import GeneratorHPVAEGAN, WDiscriminator2D
-
-from mindspore import context
 
 
 def kl_criterion(mu, logvar):
@@ -27,7 +26,7 @@ class DWithLoss(nn.Cell):
         self._netD = netD
         self._netG = netG
 
-        self.fake = None
+        self.fake = 0
         self.gradient_penalty = 0
 
     def construct(self, real, noise_init, noist_amps):
@@ -66,14 +65,9 @@ class GWithLoss(nn.Cell):
         self.kl_weight = opt.kl_weight
         self.disc_loss_weight = opt.disc_loss_weight
 
-        self.generated = None
-        self.generated_vae = None
-
     def construct(self, real, real_zero, fake, noise_amps, isVAE=False):
         fake = ops.stop_gradient(fake)
         generated, generated_vae, mu, logvar = self.backbone_network(real_zero, noise_amps, isRandom=False)
-        self.generated = generated
-        self.generated_vae = generated_vae
         # TODO: 前两个参数+元组, 目前无bern
         if isVAE:
             ## (1) VAE loss
