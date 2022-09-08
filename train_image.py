@@ -86,7 +86,7 @@ def train(opt, netG):
             ]
 
     # Optimizer
-    optimizerG = ClippedAdam(opt, parameter_list, opt.lr_g, beta1=opt.beta1, beta2=0.999)
+    optimizerG = nn.Adam(G_curr.trainable_params(), opt.lr_g, beta1=opt.beta1, beta2=0.999)
     # With-loss cell
     G_loss = GWithLoss(opt, D_curr, G_curr)
     # Train-one-step cell
@@ -144,7 +144,7 @@ def train(opt, netG):
                     opt.Noise_Amps.append(opt.noise_amp)
                 else:
                     opt.Noise_Amps.append(0)
-                    z_reconstruction, _, _, _ = G_curr(real_zero, opt.Noise_Amps, randMode=False)
+                    z_reconstruction, _, _, _ = G_curr(real_zero, opt.Noise_Amps, isRandom=False)
                     RMSE = nn.RMSELoss()(real, z_reconstruction)
                     RMSE = ops.stop_gradient(RMSE)
 
@@ -153,20 +153,16 @@ def train(opt, netG):
 
 
         ## Update parameters
-        generated, generated_vae, mu, logvar = G_curr(real_zero, opt.Noise_Amps, randMode=False)
-        # TODO: 前两个参数+元组, 目前无bern
         if opt.vae_levels >= opt.scale_idx + 1:
             # (1) Update VAE network
-            G_loss.VAEMode(True)
-            total_loss += G_train(real, real_zero, generated, generated_vae, mu, logvar, 0)
+            current_loss = G_train(real, real_zero, 0, opt.Noise_Amps, True)
         else:
             # (2) Update distriminator: maximize D(x) + D(G(z))
-            fake, _ = G_curr(noise_init, opt.Noise_Amps, noise_init=noise_init, randMode=True)
-            D_train(real, fake)
+            _, fake = D_train(real, noise_init, opt.Noise_Amps)
 
             # (3) Update generator: maximize D(G(z)) (After grad clipping)
-            G_loss.VAEMode(False)
-            total_loss += G_train(real, real_zero, generated, generated_vae, mu, logvar, fake)
+            current_loss = G_train(real, real_zero, fake, opt.Noise_Amps, False)
+        total_loss += current_loss
 
 
         ## Update progress bar
@@ -175,6 +171,10 @@ def train(opt, netG):
             iteration + 1, opt.niter,
         ))
 
+
+        ## Log
+        if iteration % 100 == 0:
+            logging.info(f'Scale {opt.scale_idx + 1}/ Iter {iteration} - noise_amp: {opt.noise_amp}, loss: {current_loss}')
 
         ## Virsualize with Tensorboard
         # if opt.visualize:
@@ -221,7 +221,7 @@ def train(opt, netG):
 
 
 if __name__ == '__main__':
-    context.set_context(mode=context.GRAPH_MODE, device_id=4)
+    context.set_context(mode=1, device_id=4)
 
     ## Parser
     parser = argparse.ArgumentParser()

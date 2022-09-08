@@ -26,21 +26,25 @@ class DWithLoss(nn.Cell):
         self._netG = netG
         self._opt = opt
 
-    def construct(self, real, fake):
+    def construct(self, real, noise_init, noist_amps):
+        fake, _ = self._netG(noise_init, noist_amps, noise_init=noise_init, isRandom=True)
+        fake = ops.stop_gradient(fake)
+
         # Train with real
-        output = self._netD(real)
-        errD_real = -output.mean()
+        output_real = self.backbone_network(real)
+        errD_real = -output_real.mean()
 
         # Train with fake
-        output = self._netD(ops.stop_gradient(fake))
-        errD_fake = output.mean()
+        output_fake = self.backbone_network(fake)
+        errD_fake = output_fake.mean()
 
         # Gradient penalty
-        gradient_penalty = calc_gradient_penalty(self._netD, real, fake, self._opt.lambda_grad)
+        # gradient_penalty = calc_gradient_penalty(self.backbone_network, real, fake, self._opt.lambda_grad)
+        gradient_penalty = 0    # TODO: 改回去
 
         # Total error for Discriminator
         errD_total = errD_real + errD_fake + gradient_penalty
-        return errD_total
+        return errD_total, fake
 
     @property
     def backbone_network(self):
@@ -53,17 +57,16 @@ class GWithLoss(nn.Cell):
         self._netD = netD
         self._netG = netG
 
-        self.isVAE = False
         self.rec_loss = opt.rec_loss
         self.rec_weight = opt.rec_weight
         self.kl_weight = opt.kl_weight
         self.disc_loss_weight = opt.disc_loss_weight
 
-    def VAEMode(self, flag):
-        self.isVAE = flag
-
-    def construct(self, real, real_zero, generated, generated_vae, mu, logvar, fake):
-        if self.isVAE:
+    def construct(self, real, real_zero, fake, noise_amps, isVAE=False):
+        fake = ops.stop_gradient(fake)
+        generated, generated_vae, mu, logvar = self.backbone_network(real_zero, noise_amps, isRandom=False)
+        # TODO: 前两个参数+元组, 目前无bern
+        if isVAE:
             ## (1) VAE loss
             rec_vae_loss = self.rec_loss(generated, real) + self.rec_loss(generated_vae, real_zero)
             kl_loss = kl_criterion(mu, logvar)
