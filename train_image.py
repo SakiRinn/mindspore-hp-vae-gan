@@ -246,7 +246,7 @@ def train(opt, netG):
 
 
 if __name__ == '__main__':
-    context.set_context(mode=0, device_id=4)
+    context.set_context(mode=1, device_id=4)
 
     ## Parser
     parser = argparse.ArgumentParser()

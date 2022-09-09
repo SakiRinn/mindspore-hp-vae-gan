@@ -1,9 +1,10 @@
+from .networks_2d import GeneratorHPVAEGAN, WDiscriminator2D
+
 import mindspore.nn as nn
 import mindspore.ops as ops
 from mindspore import Tensor
-
-from utils import calc_gradient_penalty
-from .networks_2d import GeneratorHPVAEGAN, WDiscriminator2D
+from mindspore import dtype as mstype
+from mindspore.common.initializer import Normal, One
 
 
 def kl_criterion(mu, logvar):
@@ -27,7 +28,7 @@ class DWithLoss(nn.Cell):
         self._netG = netG
 
         self.fake = 0
-        self.gradient_penalty = 0
+        self.alpha = Tensor(shape=(1, 1), init=Normal(), dtype=mstype.float32)
 
     def construct(self, real, noise_init, noist_amps):
         fake, _ = self._netG(noise_init, noist_amps, noise_init=noise_init, isRandom=True)
@@ -43,11 +44,18 @@ class DWithLoss(nn.Cell):
         errD_fake = output_fake.mean()
 
         # Gradient penalty
-        # gradient_penalty = calc_gradient_penalty(self.backbone_network, real, fake, self._opt.lambda_grad)
+        gradient_penalty = self.calc_gradient_penalty(real, fake, self._opt.lambda_grad)
 
         # Total error for Discriminator
-        errD_total = errD_real + errD_fake + self.gradient_penalty
+        errD_total = errD_real + errD_fake + gradient_penalty
         return errD_total
+
+    def calc_gradient_penalty(self, real, fake, LAMBDA=1):
+        alpha = ops.BroadcastTo(real.shape)(self.alpha)
+        interpolates = (alpha * real + ((1 - alpha) * fake))
+        gradients = ops.GradOperation()(self.backbone_network)(interpolates)
+        gradient_penalty = ((ops.LpNorm(1, 2)(gradients) - 1) ** 2).mean() * LAMBDA
+        return gradient_penalty
 
     @property
     def backbone_network(self):

@@ -170,12 +170,11 @@ class WDiscriminator2D(nn.Cell):
 
         self.head = ConvBlock2DSN(opt.nc_im, N, opt.ker_size,
                                   opt.ker_size // 2, stride=1, bn=True, act='lrelu')
-        body = nn.SequentialCell([])
-        for _ in range(opt.num_layer):
-            block = ConvBlock2DSN(N, N, opt.ker_size,
-                                  opt.ker_size // 2, stride=1, bn=True, act='lrelu')
-            body.append(block)
-        self.body = body
+        self.body = nn.SequentialCell([ConvBlock2DSN(N, N, opt.ker_size,
+                                       opt.ker_size // 2, stride=1, bn=True, act='lrelu')])
+        for _ in range(opt.num_layer - 1):
+            self.body.append(ConvBlock2DSN(N, N, opt.ker_size,
+                             opt.ker_size // 2, stride=1, bn=True, act='lrelu'))
         self.tail = nn.Conv2d(N, 1, kernel_size=opt.ker_size, padding=1, stride=1,
                               weight_init=Normal(0.02, 0.0),
                               pad_mode='pad', has_bias=True)
@@ -233,7 +232,7 @@ class GeneratorHPVAEGAN(nn.Cell):
             _first_stage.append(nn.Conv2d(self.N, self.opt.nc_im, self.opt.ker_size,
                                           stride=1, padding=self.opt.ker_size // 2,
                                           weight_init=Normal(0.02, 0.0), pad_mode='pad', has_bias=True))
-            self.body.append(_first_stage)
+            self.body = nn.CellList([_first_stage])
         else:
             self.body.append(copy.deepcopy(self.body[-1]))
             params = self.body[-1].parameters_dict()
