@@ -1,5 +1,6 @@
 from __future__ import absolute_import, division, print_function
 import copy
+import re
 import numpy as np
 
 import mindspore.nn as nn
@@ -237,7 +238,11 @@ class GeneratorHPVAEGAN(nn.Cell):
             self.body.append(copy.deepcopy(self.body[-1]))
             params = self.body[-1].parameters_dict()
             for key in params.keys():
-                params[key].name = key.replace(f'{len(self.body) - 1}', f'{len(self.body)}', 1)
+                if re.search(r'0.0.[0-9].[0-9].', key):
+                    params[key].name = key.replace(f'0.0.{len(self.body)-1}', f'{len(self.body)-1}', 1)
+                else:
+                    params[key].name = key.replace(f'{len(self.body)-2}', f'{len(self.body)-1}', 1)
+        print(self.body.parameters_dict())
 
     def construct(self, video, noise_amp, noise_init=None, sample_init=None, isRandom=False):
         if sample_init is not None:

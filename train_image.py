@@ -125,7 +125,7 @@ def train(opt, netG):
             real, real_zero = data
         else:
             real, _ = data
-            real_zero = real
+            real_zero = real.copy()
 
         initial_size = utils.get_scales_by_index(0, opt.scale_factor, opt.stop_scale, opt.img_size)
         initial_size = [int(initial_size * opt.ar), initial_size]
@@ -325,7 +325,7 @@ if __name__ == '__main__':
 
     ## Define & Initialize
     # Saver
-    opt.saver = utils.ImageSaver(opt)
+    opt.saver = utils.DataSaver(opt)
 
     # Tensorboard Summary
     # opt.summary = utils.TensorboardSummary(opt.saver.experiment_dir)
@@ -393,17 +393,18 @@ if __name__ == '__main__':
     netG = getattr(networks_2d, opt.generator)(opt)
 
     if opt.netG != '':
-        if not os.path.isfile(opt.netG):
-            raise RuntimeError(f"=> no <G> checkpoint found at '{opt.netG}'")
-        checkpoint = mindspore.load_checkpoint(opt.netG)
+        # Init
+        opt.Noise_Amps = opt.saver.load_json('config.json')['noise_amps']
         opt.scale_idx = opt.saver.load_json('config.json')['scale']
         opt.resumed_idx = opt.saver.load_json('config.json')['scale']
         opt.resume_dir = '/'.join(opt.netG.split('/')[:-1])
+        # Load
+        if not os.path.isfile(opt.netG):
+            raise RuntimeError(f"=> no <G> checkpoint found at '{opt.netG}'")
+        checkpoint = mindspore.load_checkpoint(opt.netG)
         for _ in range(opt.scale_idx):
             netG.init_next_stage()
         netG.load_checkpoint(opt.netG)
-        # Noise Amp
-        opt.Noise_Amps = opt.saver.load_json('config.json')['noise_amps']
     else:
         opt.resumed_idx = -1
 

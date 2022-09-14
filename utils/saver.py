@@ -55,7 +55,7 @@ class VideoSaver:
         write_video(array, filename, self.opt)
 
 
-class ImageSaver(object):
+class DataSaver(object):
     def __init__(self, opt, run_id=None):
         self.opt = opt
         if not hasattr(opt, 'experiment_dir') or not os.path.exists(opt.experiment_dir):

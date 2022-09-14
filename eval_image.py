@@ -1,16 +1,17 @@
 import argparse
-import utils
 import os
 from glob import glob
 import ast
-
-from utils import logger, tools
+import pickle as pkl
 import logging
 import colorama
 
-import torch
-from torch.utils.data import DataLoader
+import mindspore
+import mindspore.ops as ops
+from mindspore.dataset import GeneratorDataset
 
+import utils
+from utils import logger, tools
 from modules import networks_2d
 from datasets.image import SingleImageDataset
 
@@ -22,12 +23,10 @@ magenta = colorama.Fore.MAGENTA + colorama.Style.BRIGHT
 
 def eval(opt, netG):
     # Re-generate dataset frames
-
     if not hasattr(opt, 'Z_init_size'):
         initial_size = utils.get_scales_by_index(0, opt.scale_factor, opt.stop_scale, opt.img_size)
         initial_size = [int(initial_size * opt.ar), initial_size]
-        opt.Z_init_size = [1, opt.latent_dim, *initial_size]
-
+        opt.Z_init_size = [opt.batch_size, opt.latent_dim, *initial_size]
     G_curr = netG
 
     progressbar_args = {
@@ -40,21 +39,9 @@ def eval(opt, netG):
         "postfix": True
     }
     epoch_iterator = tools.create_progressbar(**progressbar_args)
-    iterator = iter(data_loader)
 
     random_samples = []
     for iteration in epoch_iterator:
-        try:
-            data = next(iterator)
-        except StopIteration:
-            iterator = iter(opt.data_loader)
-            data = next(iterator)
-
-        if opt.scale_idx > 0:
-            real, real_zero = data
-            real = real.to(opt.device)
-        else:
-            real = data.to(opt.device)
 
         noise_init = utils.generate_noise_size(opt.Z_init_size)
 
@@ -64,16 +51,15 @@ def eval(opt, netG):
             iteration + 1, opt.niter,
         ))
 
-        with torch.no_grad():
-            fake_var = []
-            fake_vae_var = []
-            for _ in range(opt.num_samples):
-                noise_init = utils.generate_noise_ref(noise_init)
-                fake, fake_vae = G_curr(noise_init, opt.Noise_Amps, noise_init=noise_init, mode="rand")
-                fake_var.append(fake)
-                fake_vae_var.append(fake_vae)
-            fake_var = torch.cat(fake_var, dim=0)
-            fake_vae_var = torch.cat(fake_vae_var, dim=0)
+        fake_var = []
+        fake_vae_var = []
+        for _ in range(opt.num_samples):
+            noise_init = utils.generate_noise_ref(noise_init)
+            fake, fake_vae = G_curr(noise_init, opt.Noise_Amps, noise_init=noise_init, isRandom=True)
+            fake_var.append(fake)
+            fake_vae_var.append(fake_vae)
+        fake_var = ops.Concat(0)(fake_var)
+        fake_vae_var = ops.Concat(0)(fake_vae_var)
 
         # Tensorboard
         # opt.summary.visualize_image(opt, iteration, real, 'Real')
@@ -82,8 +68,10 @@ def eval(opt, netG):
 
         random_samples.append(fake_var)
 
-    random_samples = torch.cat(random_samples, dim=0)
-    torch.save(random_samples, os.path.join(opt.saver.eval_dir, "random_samples.pth"))
+    random_samples = ops.Concat(0)(random_samples)
+    opt.saver.save_json()
+    with open(os.path.join(opt.saver.eval_dir, 'random_samples.pkl'), 'wb') as f:
+        pkl.dump(random_samples, f)
     epoch_iterator.close()
 
 
@@ -134,20 +122,15 @@ if __name__ == '__main__':
             logging.info('Skipping {}, file not exists!'.format(opt.netG))
             continue
 
-        # Define Saver
-        opt.saver = utils.ImageSaver(opt)
+        ## Define & Initialize
+        # Saver
+        opt.saver = utils.DataSaver(opt)
 
-        # Define Tensorboard Summary
-        opt.summary = utils.TensorboardSummary(opt.saver.eval_dir)
+        # Tensorboard Summary
+        # opt.summary = utils.TensorboardSummary(opt.saver.eval_dir)
 
         # Logger
         logger.configure_logging(os.path.abspath(os.path.join(opt.experiment_dir, 'logbook.txt')))
-
-        # CUDA
-        # device = 'cuda' if torch.cuda.is_available() and not opt.no_cuda else 'cpu'
-        # opt.device = device
-        # if torch.cuda.is_available() and device == 'cpu':
-        #     logging.info("WARNING: You have a CUDA device, so you should probably run with --cuda")
 
         # Adjust scales
         utils.adjust_scales2image(opt.img_size, opt)
@@ -157,30 +140,29 @@ if __name__ == '__main__':
         opt.nfc_prev = 0
         opt.Noise_Amps = []
 
-        # Data
+        # Dataset
         dataset = SingleImageDataset(opt)
-        data_loader = DataLoader(dataset,
-                                 shuffle=True,
-                                 drop_last=True,
-                                 batch_size=1,
-                                 num_workers=2)
-        opt.dataset = dataset
+        data_loader = GeneratorDataset(dataset, ['data', 'zero-scale data'], shuffle=True)
+        data_loader = data_loader.batch(opt.batch_size)
         opt.data_loader = data_loader
 
-        # Current networks
+        ## Current networks
         assert hasattr(networks_2d, opt.generator)
-        netG = getattr(networks_2d, opt.generator)(opt).to(opt.device)
+        netG = getattr(networks_2d, opt.generator)(opt)
 
+        # Init
+        opt.Noise_Amps = opt.saver.load_json('config.json')['noise_amps']
+        opt.scale_idx = opt.saver.load_json('config.json')['scale_idx']
+        opt.resumed_idx = opt.saver.load_json('config.json')['scale_idx']
+        opt.resume_dir = '/'.join(opt.netG.split('/')[:-1])
+
+        # Load
         if not os.path.isfile(opt.netG):
             raise RuntimeError("=> no <G> checkpoint found at '{}'".format(opt.netG))
-        checkpoint = torch.load(opt.netG)
-        opt.scale_idx = checkpoint['scale']
-        opt.resumed_idx = checkpoint['scale']
-        opt.resume_dir = '/'.join(opt.netG.split('/')[:-1])
+        checkpoint = mindspore.load_checkpoint(opt.netG)
         for _ in range(opt.scale_idx):
             netG.init_next_stage()
-        netG.load_state_dict(checkpoint['state_dict'])
-        # NoiseAmp
-        opt.Noise_Amps = torch.load(os.path.join(opt.resume_dir, 'Noise_Amps.pth'))['data']
+        netG.load_checkpoint(opt.netG)
 
+        ## Eval
         eval(opt, netG)
