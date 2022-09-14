@@ -7,9 +7,12 @@ import logging
 import colorama
 
 import mindspore
+from mindspore import context, Tensor
 import mindspore.ops as ops
 from mindspore.dataset import GeneratorDataset
 
+import sys
+sys.path.insert(0, '.')
 import utils
 from utils import logger, tools
 from modules import networks_2d
@@ -69,27 +72,27 @@ def eval(opt, netG):
         random_samples.append(fake_var)
 
     random_samples = ops.Concat(0)(random_samples)
-    opt.saver.save_json()
     with open(os.path.join(opt.saver.eval_dir, 'random_samples.pkl'), 'wb') as f:
         pkl.dump(random_samples, f)
     epoch_iterator.close()
 
 
 if __name__ == '__main__':
+    context.set_context(mode=1, device_id=4)
+
     # Argument Parser
     parser = argparse.ArgumentParser()
     parser.add_argument('--exp-dir', required=True, help="Experiment directory")
     parser.add_argument('--num-samples', type=int, default=10, help='number of samples to generate')
-    parser.add_argument('--netG', default='netG.pth', help="path to netG (to continue training)")
+    parser.add_argument('--netG', default='netG.ckpt', help="path to netG (to continue training)")
     parser.add_argument('--niter', type=int, default=1, help='number of epochs')
     parser.add_argument('--batch-size', type=int, default=1)
     parser.add_argument('--data-rep', type=int, default=1, help='data repetition')
-    parser.add_argument('--no-cuda', action='store_true', default=False, help='disables cuda')
 
     parser.set_defaults(hflip=False)
     opt = parser.parse_args()
 
-    exceptions = ['no-cuda', 'niter', 'data_rep', 'batch_size', 'netG']
+    exceptions = ['niter', 'data_rep', 'batch_size', 'netG']
     all_dirs = glob(opt.exp_dir)
 
     progressbar_args = {
@@ -162,7 +165,7 @@ if __name__ == '__main__':
         checkpoint = mindspore.load_checkpoint(opt.netG)
         for _ in range(opt.scale_idx):
             netG.init_next_stage()
-        netG.load_checkpoint(opt.netG)
+        mindspore.load_param_into_net(netG, checkpoint)
 
         ## Eval
         eval(opt, netG)

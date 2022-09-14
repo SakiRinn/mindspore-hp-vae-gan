@@ -1,22 +1,24 @@
-import mindspore
-import mindspore.ops as ops
 import numpy as np
 import imageio
 from glob import glob
 import os
 import argparse
+import pickle as pkl
+import mindspore.ops as ops
 
 
 def generate_images(opt):
     for exp_dir in opt.experiments:
-        fakes_path = os.path.join(exp_dir, 'random_samples.pth')
+        fakes_path = os.path.join(exp_dir, 'random_samples.pkl')
         os.makedirs(os.path.join(exp_dir, opt.save_path), exist_ok=True)
         print('Generating dir {}'.format(os.path.join(exp_dir, opt.save_path)))
 
-        random_samples = ops.Transpose()(mindspore.load_checkpoint(fakes_path), (0, 2, 3, 1))[:opt.max_samples]
+        with open(fakes_path, 'rb') as f:
+            random_samples = pkl.load(f)
+        random_samples = ops.Transpose()(random_samples, (0, 2, 3, 1))[:opt.max_samples]
         random_samples = (random_samples + 1) / 2
         random_samples = random_samples[:20] * 255
-        random_samples = (random_samples.data.asnumpy()).astype(np.uint8)
+        random_samples = (random_samples.asnumpy()).astype(np.uint8)
         for i, sample in enumerate(random_samples):
             imageio.imwrite(os.path.join(exp_dir, opt.save_path, 'fake_{}.png'.format(i)), sample)
 

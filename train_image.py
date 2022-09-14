@@ -144,7 +144,7 @@ def train(opt, netG):
                     opt.Noise_Amps.append(opt.noise_amp)
                 else:
                     opt.Noise_Amps.append(0)
-                    z_reconstruction, _, _, _ = G_curr(real_zero, opt.Noise_Amps, isRandom=False)
+                    z_reconstruction, _, = G_curr(real_zero, opt.Noise_Amps, isRandom=False)
                     RMSE = nn.RMSELoss()(real, z_reconstruction)
                     RMSE = ops.stop_gradient(RMSE)
 
@@ -192,7 +192,8 @@ def train(opt, netG):
                     for _ in range(3):
                         noise_init = utils.generate_noise_ref(noise_init)
                         noise_init = ops.stop_gradient(noise_init)
-                        fake, fake_vae = G_curr(noise_init, opt.Noise_Amps, noise_init=noise_init, isRandom=True)
+                        fake, fake_vae = G_curr(noise_init, opt.Noise_Amps,
+                                                noise_init=noise_init, isRandom=True)
                         fake_var.append(fake)
                         fake_vae_var.append(fake_vae)
                     fake_var = ops.Concat()(fake_var)
@@ -404,7 +405,7 @@ if __name__ == '__main__':
         checkpoint = mindspore.load_checkpoint(opt.netG)
         for _ in range(opt.scale_idx):
             netG.init_next_stage()
-        netG.load_checkpoint(opt.netG)
+        mindspore.load_param_into_net(netG, checkpoint)
     else:
         opt.resumed_idx = -1
 

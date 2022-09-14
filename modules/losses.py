@@ -44,7 +44,8 @@ class DWithLoss(nn.Cell):
         errD_fake = output_fake.mean()
 
         # Gradient penalty
-        gradient_penalty = self.calc_gradient_penalty(real, fake, self._opt.lambda_grad)
+        # gradient_penalty = self.calc_gradient_penalty(real, fake, self._opt.lambda_grad)
+        gradient_penalty = 0
 
         # Total error for Discriminator
         errD_total = errD_real + errD_fake + gradient_penalty
@@ -75,8 +76,16 @@ class GWithLoss(nn.Cell):
 
     def construct(self, real, real_zero, fake, noise_amps, isVAE=False):
         fake = ops.stop_gradient(fake)
-        generated, generated_vae, mu, logvar = self.backbone_network(real_zero, noise_amps, isRandom=False)
-        # TODO: 前两个参数+元组, 目前无bern
+        generated, generated_vae = self.backbone_network(real_zero, noise_amps, isRandom=False)
+
+        mu, logvar, bern = None, None, None
+        if len(self.backbone_network.return_list) == 2:
+            mu, logvar = self.backbone_network.return_list
+        elif len(self.backbone_network.return_list) == 3:
+            mu, logvar, bern = self.backbone_network.return_list
+        else:
+            exit(1)
+
         if isVAE:
             ## (1) VAE loss
             rec_vae_loss = self.rec_loss(generated, real) + self.rec_loss(generated_vae, real_zero)
