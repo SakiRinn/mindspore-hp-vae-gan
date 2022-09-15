@@ -31,8 +31,9 @@ class DWithLoss(nn.Cell):
         self.alpha = Tensor(shape=(1, 1), init=Normal(), dtype=mstype.float32)
 
     def construct(self, real, noise_init, noist_amps):
-        fake, _ = self._netG(noise_init, noist_amps, noise_init=noise_init, isRandom=True)
-        fake = ops.stop_gradient(fake)
+        # Forward
+        return_list = self._netG(noise_init, noist_amps, noise_init=noise_init, isRandom=True)
+        fake = ops.stop_gradient(return_list[0])
         self.fake = fake
 
         # Train with real
@@ -44,8 +45,7 @@ class DWithLoss(nn.Cell):
         errD_fake = output_fake.mean()
 
         # Gradient penalty
-        # gradient_penalty = self.calc_gradient_penalty(real, fake, self._opt.lambda_grad)
-        gradient_penalty = 0
+        gradient_penalty = self.calc_gradient_penalty(real, fake, self._opt.lambda_grad)
 
         # Total error for Discriminator
         errD_total = errD_real + errD_fake + gradient_penalty
@@ -75,16 +75,13 @@ class GWithLoss(nn.Cell):
         self.disc_loss_weight = opt.disc_loss_weight
 
     def construct(self, real, real_zero, fake, noise_amps, isVAE=False):
+        # Forward
         fake = ops.stop_gradient(fake)
-        generated, generated_vae = self.backbone_network(real_zero, noise_amps, isRandom=False)
-
-        mu, logvar, bern = None, None, None
-        if len(self.backbone_network.return_list) == 2:
-            mu, logvar = self.backbone_network.return_list
-        elif len(self.backbone_network.return_list) == 3:
-            mu, logvar, bern = self.backbone_network.return_list
-        else:
-            exit(1)
+        return_list = self.backbone_network(real_zero, noise_amps, isRandom=False)
+        generated = return_list[0]
+        generated_vae = return_list[1]
+        mu = return_list[2]
+        logvar = return_list[3]
 
         if isVAE:
             ## (1) VAE loss

@@ -1,13 +1,13 @@
 from __future__ import absolute_import, division, print_function
 import copy
+from inspect import Parameter
 import re
 import numpy as np
 
 import mindspore.nn as nn
-import mindspore.nn.probability.distribution as msd
 import mindspore.ops as ops
 from mindspore.ops import constexpr
-from mindspore import Tensor, context
+from mindspore import Tensor, context, Parameter
 from mindspore import dtype as mstype
 from mindspore.common.initializer import Normal, Zero
 
@@ -202,7 +202,6 @@ class GeneratorHPVAEGAN(nn.Cell):
         N = int(opt.nfc)
         self.N = N
         self.is_training = is_training
-        self.return_list = []
 
         self.encode = Encode2DVAE(opt, out_dim=opt.latent_dim, num_blocks=opt.enc_blocks)
 
@@ -245,7 +244,6 @@ class GeneratorHPVAEGAN(nn.Cell):
                     params[key].name = key.replace(f'{len(self.body)-2}', f'{len(self.body)-1}', 1)
 
     def construct(self, video, noise_amp, noise_init=None, sample_init=None, isRandom=False):
-        self.return_list.clear()
         if sample_init is not None:
             if len(self.body) <= sample_init[0]:
                 exit(1)
@@ -271,7 +269,7 @@ class GeneratorHPVAEGAN(nn.Cell):
             x_prev_out = self.refinement_layers(sample_init[0], sample_init[1], noise_amp, isRandom)
 
         if noise_init is None:
-            self.return_list += [mu, logvar]
+            return x_prev_out, vae_out, mu, logvar
         return x_prev_out, vae_out
 
     def refinement_layers(self, start_idx, x_prev_out, noise_amp, isRandom=False):
@@ -310,7 +308,6 @@ class GeneratorVAE_nb(nn.Cell):
         N = int(opt.nfc)
         self.N = N
         self.is_training = self.is_training = is_training
-        self.return_list = []
 
         self.encode = Encode2DVAE_nb(opt, out_dim=opt.latent_dim, num_blocks=opt.enc_blocks)
 
@@ -344,7 +341,6 @@ class GeneratorVAE_nb(nn.Cell):
 
     def construct(self, video, noise_amp,
                   noise_init_norm=None, noise_init_bern=None, sample_init=None, randMode=False):
-        self.return_list.clear()
         if sample_init is not None:
             if len(self.body) <= sample_init[0]:
                 exit(1)
@@ -376,7 +372,7 @@ class GeneratorVAE_nb(nn.Cell):
             x_prev_out = self.refinement_layers(0, vae_out, noise_amp, randMode)
 
         if noise_init_norm is None:
-            self.return_list += [mu, logvar, bern]
+            return x_prev_out, vae_out, mu, logvar, bern
         return x_prev_out, vae_out
 
     def refinement_layers(self, start_idx, x_prev_out, noise_amp, randMode=False):

@@ -144,7 +144,8 @@ def train(opt, netG):
                     opt.Noise_Amps.append(opt.noise_amp)
                 else:
                     opt.Noise_Amps.append(0)
-                    z_reconstruction, _, = G_curr(real_zero, opt.Noise_Amps, isRandom=False)
+                    return_list = G_curr(real_zero, opt.Noise_Amps, isRandom=False)
+                    z_reconstruction = return_list[0]
                     RMSE = nn.RMSELoss()(real, z_reconstruction)
                     RMSE = ops.stop_gradient(RMSE)
 
@@ -192,10 +193,9 @@ def train(opt, netG):
                     for _ in range(3):
                         noise_init = utils.generate_noise_ref(noise_init)
                         noise_init = ops.stop_gradient(noise_init)
-                        fake, fake_vae = G_curr(noise_init, opt.Noise_Amps,
-                                                noise_init=noise_init, isRandom=True)
-                        fake_var.append(fake)
-                        fake_vae_var.append(fake_vae)
+                        return_list = G_curr(noise_init, opt.Noise_Amps, noise_init=noise_init, isRandom=True)
+                        fake_var.append(return_list[0])
+                        fake_vae_var.append(return_list[1])
                     fake_var = ops.Concat()(fake_var)
                     fake_vae_var = ops.Concat()(fake_vae_var)
                     opt.saver.save_images(fake_var, f'fake_var_{iteration}.jpg')
@@ -247,7 +247,7 @@ def train(opt, netG):
 
 
 if __name__ == '__main__':
-    context.set_context(mode=1, device_id=4)
+    context.set_context(mode=0, device_id=4)
 
     ## Parser
     parser = argparse.ArgumentParser()
