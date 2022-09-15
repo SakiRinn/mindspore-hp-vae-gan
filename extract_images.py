@@ -15,7 +15,7 @@ def generate_images(opt):
 
         with open(fakes_path, 'rb') as f:
             random_samples = pkl.load(f)
-        random_samples = ops.Transpose()(random_samples, (0, 2, 3, 1))[:opt.max_samples]
+        random_samples = random_samples.transpose(0, 2, 3, 1)[:opt.max_samples]
         random_samples = (random_samples + 1) / 2
         random_samples = random_samples[:20] * 255
         random_samples = (random_samples.asnumpy()).astype(np.uint8)

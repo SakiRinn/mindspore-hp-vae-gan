@@ -3,7 +3,7 @@ from mindspore import Tensor
 import mindspore.ops as ops
 from mindspore.common.initializer import Zero
 from mindspore import dtype as mstype
-import mindspore.nn.probability.distribution as msd
+from mindspore.common import ms_function
 from mindspore.ops import constexpr
 
 import numpy as np  # TODO: 替代三线性插值，待移除
@@ -14,23 +14,44 @@ __all__ = ['interpolate', 'interpolate_3D', 'adjust_scales2image',
            'generate_noise_size', 'generate_noise_ref','get_scales_by_index',
            'get_fps_td_by_index', 'get_fps_by_index', 'upscale', 'upscale_2d']
 
+def int_(x):
+    return int(x)
 
-def ceil(x):
+def ceil_(x):
     y = int(x)
     return y + 1 if x != y else y
 
+@constexpr
+def generate_noise_size(size=None, type='normal', emb_size=None):
+    noise = Tensor(shape=size, init=Zero(), dtype=mstype.float32)
+    if type == 'normal':
+        return Tensor(np.random.normal(size=noise.shape).astype('float32'))
+    elif type == 'benoulli':
+        return Tensor(np.random.binomial(1, 0.5, size=noise.shape).astype('float32'))
+    elif type == 'int':
+        if emb_size is None or size is None:
+            exit(1)
+        return ops.UniformInt()(size, 0, emb_size)
+    return Tensor(np.random.uniform(0, 1, size=noise.shape).astype('float32'))
+
+@constexpr
+def generate_noise_ref(ref, type='normal'):
+    noise = Tensor(shape=ref.shape, init=Zero(), dtype=mstype.float32)
+    if type == 'normal':
+        return Tensor(np.random.normal(size=noise.shape).astype('float32'))
+    elif type == 'benoulli':
+        return Tensor(np.random.binomial(1, 0.5, size=noise.shape).astype('float32'))
+    return Tensor(np.random.uniform(0, 1, size=noise.shape).astype('float32'))
+
 
 def interpolate(input, size=None):
-    size = (int(size[0]), int(size[1]))
     resize_bilinear = ops.ResizeBilinear(size, align_corners=True)    # TODO: align_corners
-
     if input.ndim == 5:
         b, c, t, h0, w0 = input.shape
-        img = ops.Transpose()(input, (0, 2, 1, 3, 4)).reshape(input.shape[0] + input.shape[1],
-                                                              *input.shape[2:])  # (B+T)CHW
+        img = input.transpose(0, 2, 1, 3, 4).reshape(input.shape[0] + input.shape[1], *input.shape[2:])  # (B+T)CHW
         scaled = resize_bilinear(img)
         _, _, h1, w1 = scaled.shape
-        scaled = ops.Transpose()(scaled.reshape(b, t, c, h1, w1), (0, 2, 1, 3, 4))
+        scaled = scaled.reshape(b, t, c, h1, w1).transpose(0, 2, 1, 3, 4)
     else:
         scaled = resize_bilinear(input)
 
@@ -61,39 +82,15 @@ def adjust_scales2image(size, opt):
     opt.stop_scale = opt.num_scales - scale2stop
 
 
-@constexpr
-def generate_noise_size(size=None, type='normal', emb_size=None):
-    noise = Tensor(shape=size, init=Zero(), dtype=mstype.float32)
-    if type == 'normal':
-        return Tensor(np.random.normal(size=noise.shape).astype('float32'))
-    elif type == 'benoulli':
-        return Tensor(np.random.binomial(1, 0.5, size=noise.shape).astype('float32'))
-    elif type == 'int':
-        if emb_size is None or size is None:
-            exit(1)
-        return ops.UniformInt()(size, 0, emb_size)
-    return Tensor(np.random.uniform(0, 1, size=noise.shape).astype('float32'))
-
-
-@constexpr
-def generate_noise_ref(ref, type='normal'):
-    noise = Tensor(shape=ref.shape, init=Zero(), dtype=mstype.float32)
-    if type == 'normal':
-        return Tensor(np.random.normal(size=noise.shape).astype('float32'))
-    elif type == 'benoulli':
-        return Tensor(np.random.binomial(1, 0.5, size=noise.shape).astype('float32'))
-    return Tensor(np.random.uniform(0, 1, size=noise.shape).astype('float32'))
-
-
 def get_scales_by_index(index, scale_factor, stop_scale, img_size):
-    scale = pow(scale_factor, stop_scale - index)
-    s_size = ceil(scale * img_size)
+    scale = pow(scale_factor, stop_scale - index) + 1e-6
+    s_size = ceil_(scale * img_size)
     return s_size
 
 
 def get_fps_by_index(index, opt):
     # Linear fps interpolation by divisors
-    fps_index = int((index / opt.stop_scale_time) * (len(opt.sampling_rates) - 1))
+    fps_index = int_((index / opt.stop_scale_time) * (len(opt.sampling_rates) - 1))
 
     return opt.org_fps / opt.sampling_rates[fps_index], fps_index
 
@@ -113,7 +110,7 @@ def upscale(video, index, opt):
 
     next_shape = get_scales_by_index(index, opt.scale_factor, opt.stop_scale, opt.img_size)
     next_fps, next_td, _ = get_fps_td_by_index(index, opt)
-    next_shape = [next_td, int(next_shape * opt.ar), next_shape]
+    next_shape = [next_td, int_(next_shape * opt.ar), next_shape]
 
     # Video interpolation
     vid_up = interpolate_3D(video, size=next_shape)
@@ -126,9 +123,17 @@ def upscale_2d(image, index, scale_factor, stop_scale, img_size, ar):
         exit(1)
 
     next_shape = get_scales_by_index(index, scale_factor, stop_scale, img_size)
-    next_shape = [next_shape * ar, next_shape]
+    next_shape = [int_(next_shape * ar), next_shape]
+    print(next_shape)
 
     # Video interpolation
     img_up = interpolate(image, size=next_shape)
 
     return img_up
+
+
+if __name__ == '__main__':
+    import mindspore.context as context
+    context.set_context(mode=1)
+    image = Tensor(np.random.binomial(1, 0.5, size=(2, 3, 38, 51)).astype('float32'))
+    print(get_scales_by_index(3, 0.7937005259840998, 9, 256))

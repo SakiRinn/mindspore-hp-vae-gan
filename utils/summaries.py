@@ -26,7 +26,7 @@ class TensorboardSummary(object):
 
     def visualize_video(self, opt, global_step, video, name):
 
-        video_transpose = ops.Transpose()(video, (0, 2, 1, 3, 4))  # BxTxCxHxW
+        video_transpose = video.transpose(0, 2, 1, 3, 4)  # BxTxCxHxW
         video_reshaped = video_transpose.reshape(video_transpose.shape[0] + video_transpose.shape[1],
                                                  *video_transpose.shape[2:])
         # (B+T)xCxHxW

@@ -235,13 +235,7 @@ class GeneratorHPVAEGAN(nn.Cell):
                                           weight_init=Normal(0.02, 0.0), pad_mode='pad', has_bias=True))
             self.body = nn.CellList([_first_stage])
         else:
-            self.body.append(copy.deepcopy(self.body[-1]))
-            params = self.body[-1].parameters_dict()
-            for key in params.keys():
-                if re.search(r'0.0.[0-9].[0-9].', key):
-                    params[key].name = key.replace(f'0.0.{len(self.body)-1}', f'{len(self.body)-1}', 1)
-                else:
-                    params[key].name = key.replace(f'{len(self.body)-2}', f'{len(self.body)-1}', 1)
+            self.body.append(self.body[-1])
 
     def construct(self, video, noise_amp, noise_init=None, sample_init=None, isRandom=False):
         if sample_init is not None:
@@ -337,7 +331,7 @@ class GeneratorVAE_nb(nn.Cell):
                                           pad_mode='pad', has_bias=True))
             self.body.append(_first_stage)
         else:
-            self.body.append(copy.deepcopy(self.body[-1]))
+            self.body.append(self.body[-1])
 
     def construct(self, video, noise_amp,
                   noise_init_norm=None, noise_init_bern=None, sample_init=None, randMode=False):
