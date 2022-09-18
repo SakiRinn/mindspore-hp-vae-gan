@@ -15,13 +15,13 @@ __all__ = ['interpolate', 'interpolate_3D', 'adjust_scales2image',
            'get_fps_td_by_index', 'get_fps_by_index', 'upscale', 'upscale_2d']
 
 def int_(x):
-    return int(x)
+    return x // 1
 
 def ceil_(x):
-    y = int(x)
+    y = int_(x)
     return y + 1 if x != y else y
 
-@constexpr
+@constexpr(reuse_result=False)
 def generate_noise_size(size=None, type='normal', emb_size=None):
     noise = Tensor(shape=size, init=Zero(), dtype=mstype.float32)
     if type == 'normal':
@@ -34,9 +34,9 @@ def generate_noise_size(size=None, type='normal', emb_size=None):
         return ops.UniformInt()(size, 0, emb_size)
     return Tensor(np.random.uniform(0, 1, size=noise.shape).astype('float32'))
 
-@constexpr
-def generate_noise_ref(ref, type='normal'):
-    noise = Tensor(shape=ref.shape, init=Zero(), dtype=mstype.float32)
+@constexpr(reuse_result=False)
+def generate_noise_ref(ref_shape, type='normal'):
+    noise = Tensor(shape=ref_shape, init=Zero(), dtype=mstype.float32)
     if type == 'normal':
         return Tensor(np.random.normal(size=noise.shape).astype('float32'))
     elif type == 'benoulli':
@@ -84,6 +84,7 @@ def adjust_scales2image(size, opt):
 
 def get_scales_by_index(index, scale_factor, stop_scale, img_size):
     scale = pow(scale_factor, stop_scale - index) + 1e-6
+    # scale = ops.cast(scale, mstype.float32) + 1e-6
     s_size = ceil_(scale * img_size)
     return s_size
 
@@ -134,6 +135,6 @@ def upscale_2d(image, index, scale_factor, stop_scale, img_size, ar):
 
 if __name__ == '__main__':
     import mindspore.context as context
-    context.set_context(mode=1)
+    context.set_context(mode=1, device_id=5)
     image = Tensor(np.random.binomial(1, 0.5, size=(2, 3, 38, 51)).astype('float32'))
     print(get_scales_by_index(3, 0.7937005259840998, 9, 256))

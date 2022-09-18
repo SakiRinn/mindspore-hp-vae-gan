@@ -295,7 +295,7 @@ class GeneratorCSG(nn.Cell):
                     x_prev_out_up.shape[-2] + (self.opt.num_layer + 0) * 2,
                     x_prev_out_up.shape[-1] + (self.opt.num_layer + 0) * 2
                 ])
-                noise = utils.generate_noise_ref(x_prev_out_up_2)
+                noise = utils.generate_noise_ref(x_prev_out_up_2.shape)
                 x_prev = block(x_prev_out_up_2 + noise * noise_amp[idx])
             else:
                 x_prev = block(pad_op2(x_prev_out_up))
@@ -349,7 +349,7 @@ class GeneratorSG(nn.Cell):
                     x_prev_out_up.shape[-2] + (self.opt.num_layer + 2) * 2,
                     x_prev_out_up.shape[-1] + (self.opt.num_layer + 2) * 2
                 ])
-                noise = utils.generate_noise_ref(x_prev_out_up_2)
+                noise = utils.generate_noise_ref(x_prev_out_up_2.shape)
                 x_prev = block(x_prev_out_up_2 + noise * noise_amp[idx])
             else:
                 x_prev = block(pad_op(x_prev_out_up))
@@ -435,7 +435,7 @@ class GeneratorHPVAEGAN(nn.Cell):
 
             # Add noise if "random" sampling, else, add no noise is "reconstruction" mode
             if randMode and self.opt.vae_levels <= idx + 1:
-                noise = utils.generate_noise_ref(x_prev_out_up)
+                noise = utils.generate_noise_ref(x_prev_out_up.shape)
                 x_prev = block(x_prev_out_up + noise * noise_amp[idx + 1])
             else:
                 x_prev = block(x_prev_out_up)
@@ -519,7 +519,7 @@ class GeneratorVAE_nb(nn.Cell):
 
             # Add noise if "random" sampling, else, add no noise is "reconstruction" mode
             if randMode:
-                noise = utils.generate_noise_ref(x_prev_out_up)
+                noise = utils.generate_noise_ref(x_prev_out_up.shape)
                 x_prev = block(x_prev_out_up + noise * noise_amp[idx + 1])
             else:
                 x_prev = block(x_prev_out_up)

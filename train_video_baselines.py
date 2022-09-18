@@ -103,7 +103,7 @@ def train(opt, netG):
         else:
             real = data.to(opt.device)
 
-        noise_init = utils.generate_noise_ref(opt.Z_init)
+        noise_init = utils.generate_noise_ref(opt.Z_init.shape)
 
         ############################
         # calculate noise_amp

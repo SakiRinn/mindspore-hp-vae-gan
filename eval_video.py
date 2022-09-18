@@ -84,7 +84,7 @@ def eval(opt, netG):
             fake_var = []
             fake_vae_var = []
             for _ in range(opt.num_samples):
-                noise_init = utils.generate_noise_ref(noise_init)
+                noise_init = utils.generate_noise_ref(noise_init.shape)
                 fake, fake_vae = G_curr(noise_init, opt.Noise_Amps, noise_init=noise_init, mode="rand")
                 fake_var.append(fake)
                 fake_vae_var.append(fake_vae)

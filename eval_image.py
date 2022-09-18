@@ -57,7 +57,7 @@ def eval(opt, netG):
         fake_var = []
         fake_vae_var = []
         for _ in range(opt.num_samples):
-            noise_init = utils.generate_noise_ref(noise_init)
+            noise_init = utils.generate_noise_ref(noise_init.shape)
             fake, fake_vae = G_curr(noise_init, opt.Noise_Amps, noise_init=noise_init, isRandom=True)
             fake_var.append(fake)
             fake_vae_var.append(fake_vae)
@@ -78,7 +78,7 @@ def eval(opt, netG):
 
 
 if __name__ == '__main__':
-    context.set_context(mode=1, device_id=4)
+    context.set_context(mode=0, device_id=5)
 
     # Argument Parser
     parser = argparse.ArgumentParser()

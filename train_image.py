@@ -191,7 +191,7 @@ def train(opt, netG):
                     fake_var = []
                     fake_vae_var = []
                     for _ in range(3):
-                        noise_init = utils.generate_noise_ref(noise_init)
+                        noise_init = utils.generate_noise_ref(noise_init.shape)
                         noise_init = ops.stop_gradient(noise_init)
                         return_list = G_curr(noise_init, opt.Noise_Amps, noise_init=noise_init, isRandom=True)
                         fake_var.append(return_list[0])
@@ -247,7 +247,7 @@ def train(opt, netG):
 
 
 if __name__ == '__main__':
-    context.set_context(mode=0, device_id=4)
+    context.set_context(mode=1, device_id=5)
 
     ## Parser
     parser = argparse.ArgumentParser()

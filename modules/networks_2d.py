@@ -1,7 +1,4 @@
 from __future__ import absolute_import, division, print_function
-import copy
-from inspect import Parameter
-import re
 import numpy as np
 
 import mindspore.nn as nn
@@ -27,19 +24,19 @@ def get_activation(act):
     return activations[act]
 
 
-@constexpr
+@constexpr(reuse_result=False)
 def reparam(std_shape):
     return Tensor(np.random.normal(size=std_shape).astype('float32'))
 
-@constexpr
+@constexpr(reuse_result=False)
 def reparam_pred(mu_shape):
     return Tensor(np.random.normal(size=mu_shape).astype('float32'))
 
-@constexpr
+@constexpr(reuse_result=False)
 def reparam_bern(bern_shape):
     return Tensor(np.random.uniform(0, 1, size=bern_shape).astype('float32'))
 
-@constexpr
+@constexpr(reuse_result=False)
 def reparam_pred_bern(bern_shape):
     return Tensor(np.random.binomial(1, 0.5, size=bern_shape).astype('float32'))
 
@@ -278,7 +275,7 @@ class GeneratorHPVAEGAN(nn.Cell):
             # Whether add noise
             if isRandom:
                 # Yes - in random mode
-                noise = utils.generate_noise_ref(x_prev_out_up)
+                noise = utils.generate_noise_ref(x_prev_out_up.shape)
                 x_prev = block(x_prev_out_up + noise * noise_amp[idx + 1])
             else:
                 # No - in reconstruction mode
@@ -382,7 +379,7 @@ class GeneratorVAE_nb(nn.Cell):
             # Whether add noise
             if randMode:
                 # Yes - in random mode
-                noise = utils.generate_noise_ref(x_prev_out_up)
+                noise = utils.generate_noise_ref(x_prev_out_up.shape)
                 x_prev = block(x_prev_out_up + noise * noise_amp[idx + 1])
             else:
                 # No - in reconstruction mode

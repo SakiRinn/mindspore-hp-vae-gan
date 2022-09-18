@@ -2,7 +2,7 @@ from .networks_2d import GeneratorHPVAEGAN, WDiscriminator2D
 
 import mindspore.nn as nn
 import mindspore.ops as ops
-from mindspore import Tensor
+from mindspore import Tensor, Parameter
 from mindspore import dtype as mstype
 from mindspore.common.initializer import Normal, One
 
@@ -27,7 +27,7 @@ class DWithLoss(nn.Cell):
         self._netD = netD
         self._netG = netG
 
-        self.fake = 0
+        self.fake = Parameter(0, 'fake', False, True, False)
         self.alpha = Tensor(shape=(1, 1), init=Normal(), dtype=mstype.float32)
 
     def construct(self, real, noise_init, noist_amps):
