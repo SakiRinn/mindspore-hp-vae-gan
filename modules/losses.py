@@ -27,7 +27,7 @@ class DWithLoss(nn.Cell):
         self._netD = netD
         self._netG = netG
 
-        self.fake = Parameter(0, 'fake', False, True, False)
+        self.fake = Parameter(0.0, 'fake', False, True, False)
         self.alpha = Tensor(shape=(1, 1), init=Normal(), dtype=mstype.float32)
 
     def construct(self, real, noise_init, noist_amps):

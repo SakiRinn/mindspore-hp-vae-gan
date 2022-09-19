@@ -103,6 +103,6 @@ if __name__ == '__main__':
     dataset = ds.GeneratorDataset(dataset_generator, ['data1', 'data2'])
     dataset = dataset.batch(opt.batch_size)
     dataset = dataset.shuffle(4)
-    dl = dataset.create_dict_iterator()
+    dl = dataset.create_tuple_iterator()
     # 打印数据条数
     print(next(dl))

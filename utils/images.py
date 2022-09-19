@@ -14,12 +14,6 @@ __all__ = ['interpolate', 'interpolate_3D', 'adjust_scales2image',
            'generate_noise_size', 'generate_noise_ref','get_scales_by_index',
            'get_fps_td_by_index', 'get_fps_by_index', 'upscale', 'upscale_2d']
 
-def int_(x):
-    return x // 1
-
-def ceil_(x):
-    y = int_(x)
-    return y + 1 if x != y else y
 
 @constexpr(reuse_result=False)
 def generate_noise_size(size=None, type='normal', emb_size=None):
@@ -84,14 +78,14 @@ def adjust_scales2image(size, opt):
 
 def get_scales_by_index(index, scale_factor, stop_scale, img_size):
     scale = pow(scale_factor, stop_scale - index)
-    scale = ops.cast(scale, mstype.float32) + 1e-6
-    s_size = ceil_(scale * img_size)
+    scale = ops.Cast()(1e-6, mstype.float32) + scale
+    s_size = math.ceil(scale * img_size)
     return s_size
 
 
 def get_fps_by_index(index, opt):
     # Linear fps interpolation by divisors
-    fps_index = int_((index / opt.stop_scale_time) * (len(opt.sampling_rates) - 1))
+    fps_index = int((index / opt.stop_scale_time) * (len(opt.sampling_rates) - 1))
 
     return opt.org_fps / opt.sampling_rates[fps_index], fps_index
 
@@ -111,7 +105,7 @@ def upscale(video, index, opt):
 
     next_shape = get_scales_by_index(index, opt.scale_factor, opt.stop_scale, opt.img_size)
     next_fps, next_td, _ = get_fps_td_by_index(index, opt)
-    next_shape = [next_td, int_(next_shape * opt.ar), next_shape]
+    next_shape = [next_td, int(next_shape * opt.ar), next_shape]
 
     # Video interpolation
     vid_up = interpolate_3D(video, size=next_shape)
@@ -122,10 +116,8 @@ def upscale(video, index, opt):
 def upscale_2d(image, index, scale_factor, stop_scale, img_size, ar):
     if index <= 0:
         exit(1)
-
     next_shape = get_scales_by_index(index, scale_factor, stop_scale, img_size)
-    next_shape = [int_(next_shape * ar), next_shape]
-    print(next_shape)
+    next_shape = [int(next_shape * ar), next_shape]
 
     # Video interpolation
     img_up = interpolate(image, size=next_shape)
