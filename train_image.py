@@ -159,8 +159,7 @@ def train(opt, netG):
             curG_loss = G_train(real, real_zero, 0, opt.Noise_Amps, True)
         else:
             # (2) Update distriminator: maximize D(x) + D(G(z))
-            curD_loss = D_train(real, noise_init, opt.Noise_Amps)
-            fake = D_loss.fake
+            curD_loss, fake = D_train(real, noise_init, opt.Noise_Amps)
             # (3) Update generator: maximize D(G(z)) (After grad clipping)
             curG_loss = G_train(real, real_zero, fake, opt.Noise_Amps, False)
         total_loss += curG_loss

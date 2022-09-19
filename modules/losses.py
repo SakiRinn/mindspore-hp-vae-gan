@@ -22,19 +22,17 @@ def kl_bern_criterion(x):
 class DWithLoss(nn.Cell):
     def __init__(self, opt, netD, netG):
         super(DWithLoss, self).__init__(auto_prefix=False)
-        self._opt = opt
 
         self._netD = netD
         self._netG = netG
 
-        self.fake = Parameter(0.0, 'fake', False, True, False)
+        self.lambda_grad = opt.lambda_grad
         self.alpha = Tensor(shape=(1, 1), init=Normal(), dtype=mstype.float32)
 
     def construct(self, real, noise_init, noist_amps):
-        # Forward
+        # Fake
         return_list = self._netG(noise_init, noist_amps, noise_init=noise_init, isRandom=True)
         fake = ops.stop_gradient(return_list[0])
-        self.fake = fake
 
         # Train with real
         output_real = self.backbone_network(real)
@@ -45,11 +43,11 @@ class DWithLoss(nn.Cell):
         errD_fake = output_fake.mean()
 
         # Gradient penalty
-        gradient_penalty = self.calc_gradient_penalty(real, fake, self._opt.lambda_grad)
+        gradient_penalty = self.calc_gradient_penalty(real, fake, self.lambda_grad)
 
         # Total error for Discriminator
         errD_total = errD_real + errD_fake + gradient_penalty
-        return errD_total
+        return errD_total, fake
 
     def calc_gradient_penalty(self, real, fake, LAMBDA=1):
         alpha = ops.BroadcastTo(real.shape)(self.alpha)

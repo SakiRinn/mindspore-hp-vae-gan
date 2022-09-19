@@ -77,8 +77,7 @@ def adjust_scales2image(size, opt):
 
 
 def get_scales_by_index(index, scale_factor, stop_scale, img_size):
-    scale = pow(scale_factor, stop_scale - index)
-    scale = ops.Cast()(1e-6, mstype.float32) + scale
+    scale = pow(scale_factor, stop_scale - index) + pow(1, -6)
     s_size = math.ceil(scale * img_size)
     return s_size
 
