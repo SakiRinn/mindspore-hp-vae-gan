@@ -86,7 +86,7 @@ class DataSaver(object):
         filename = os.path.join(self.experiment_dir, filename)
         return mindspore.load_checkpoint(filename)
 
-    def save_json(self, obj, filename='config.json'):
+    def save_json(self, obj, filename):
         filename = os.path.join(self.experiment_dir, filename)
         with open(filename,'w+') as f:
             json.dump(obj, f)

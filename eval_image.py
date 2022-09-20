@@ -154,9 +154,9 @@ if __name__ == '__main__':
         netG = getattr(networks_2d, opt.generator)(opt)
 
         # Init
-        opt.Noise_Amps = opt.saver.load_json('config.json')['noise_amps']
-        opt.scale_idx = opt.saver.load_json('config.json')['scale_idx']
-        opt.resumed_idx = opt.saver.load_json('config.json')['scale_idx']
+        opt.Noise_Amps = opt.saver.load_json('intermediate.json')['noise_amps']
+        opt.scale_idx = opt.saver.load_json('intermediate.json')['scale_idx']
+        opt.resumed_idx = opt.saver.load_json('intermediate.json')['scale_idx']
         opt.resume_dir = '/'.join(opt.netG.split('/')[:-1])
 
         # Load

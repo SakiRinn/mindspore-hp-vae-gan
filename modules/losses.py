@@ -29,9 +29,9 @@ class DWithLoss(nn.Cell):
         self.lambda_grad = opt.lambda_grad
         self.alpha = Tensor(shape=(1, 1), init=Normal(), dtype=mstype.float32)
 
-    def construct(self, real, noise_init, noist_amps):
+    def construct(self, real, noise_init, noise_amps):
         # Fake
-        return_list = self._netG(noise_init, noist_amps, noise_init=noise_init, isRandom=True)
+        return_list = self._netG(noise_init, noise_amps, noise_init=noise_init, isRandom=True)
         fake = ops.stop_gradient(return_list[0])
 
         # Train with real
@@ -47,7 +47,7 @@ class DWithLoss(nn.Cell):
 
         # Total error for Discriminator
         errD_total = errD_real + errD_fake + gradient_penalty
-        return errD_total, fake
+        return errD_total
 
     def calc_gradient_penalty(self, real, fake, LAMBDA=1):
         alpha = ops.BroadcastTo(real.shape)(self.alpha)
@@ -72,14 +72,13 @@ class GWithLoss(nn.Cell):
         self.kl_weight = opt.kl_weight
         self.disc_loss_weight = opt.disc_loss_weight
 
-    def construct(self, real, real_zero, fake, noise_amps, isVAE=False):
+    def construct(self, real, real_zero, noise_init, noise_amps, isVAE=False):
         # Forward
-        fake = ops.stop_gradient(fake)
-        return_list = self.backbone_network(real_zero, noise_amps, isRandom=False)
-        generated = return_list[0]
-        generated_vae = return_list[1]
-        mu = return_list[2]
-        logvar = return_list[3]
+        return_list_D = self.backbone_network(real_zero, noise_amps, isRandom=False)
+        generated = return_list_D[0]
+        generated_vae = return_list_D[1]
+        mu = return_list_D[2]
+        logvar = return_list_D[3]
 
         if isVAE:
             ## (1) VAE loss
@@ -93,7 +92,11 @@ class GWithLoss(nn.Cell):
             rec_loss = self.rec_loss(generated, real)
             errG_total = self.rec_weight * rec_loss
 
-            # Train with Discriminator(fake)
+            # Fake
+            return_list_G = self._netG(noise_init, noise_amps, noise_init=noise_init, isRandom=True)
+            fake = ops.stop_gradient(return_list_G[0])
+
+            # Train with Discriminator
             output = self._netD(fake)
             errG = -output.mean() * self.disc_loss_weight
             errG_total += errG

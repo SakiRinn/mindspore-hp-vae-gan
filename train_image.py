@@ -40,6 +40,7 @@ def train(opt, netG):
         D_loss = DWithLoss(opt, D_curr, G_curr)
         # Train-one-step cell
         D_train = nn.TrainOneStepCell(D_loss, optimizerD)
+        D_train.set_train()
 
 
     ## Generator
@@ -91,6 +92,7 @@ def train(opt, netG):
     G_loss = GWithLoss(opt, D_curr, G_curr)
     # Train-one-step cell
     G_train = nn.TrainOneStepCell(G_loss, optimizerG)
+    G_train.set_train()
 
 
     ## Progress bar
@@ -156,12 +158,12 @@ def train(opt, netG):
         ## Update parameters
         if opt.vae_levels >= opt.scale_idx + 1:
             # (1) Update VAE network
-            curG_loss = G_train(real, real_zero, 0, opt.Noise_Amps, True)
+            curG_loss = G_train(real, real_zero, noise_init, opt.Noise_Amps, True)
         else:
             # (2) Update distriminator: maximize D(x) + D(G(z))
-            curD_loss, fake = D_train(real, noise_init, opt.Noise_Amps)
+            curD_loss = D_train(real, noise_init, opt.Noise_Amps)
             # (3) Update generator: maximize D(G(z)) (After grad clipping)
-            curG_loss = G_train(real, real_zero, fake, opt.Noise_Amps, False)
+            curG_loss = G_train(real, real_zero, noise_init, opt.Noise_Amps, False)
         total_loss += curG_loss
 
 
@@ -239,14 +241,14 @@ def train(opt, netG):
 
 
     ## Save data
-    opt.saver.save_json({'noise_amps': opt.Noise_Amps, 'scale_idx': opt.scale_idx}, 'config.json')
+    opt.saver.save_json({'noise_amps': opt.Noise_Amps, 'scale_idx': opt.scale_idx}, 'intermediate.json')
     opt.saver.save_checkpoint(G_curr, 'netG.ckpt')
     if opt.vae_levels < opt.scale_idx + 1:
         opt.saver.save_checkpoint(D_curr, f'netD_{opt.scale_idx}.ckpt')
 
 
 if __name__ == '__main__':
-    context.set_context(mode=0, device_id=2)
+    context.set_context(mode=0, device_id=3)
 
     ## Parser
     parser = argparse.ArgumentParser()
@@ -394,9 +396,9 @@ if __name__ == '__main__':
 
     if opt.netG != '':
         # Init
-        opt.Noise_Amps = opt.saver.load_json('config.json')['noise_amps']
-        opt.scale_idx = opt.saver.load_json('config.json')['scale']
-        opt.resumed_idx = opt.saver.load_json('config.json')['scale']
+        opt.Noise_Amps = opt.saver.load_json('intermediate.json')['noise_amps']
+        opt.scale_idx = opt.saver.load_json('intermediate.json')['scale']
+        opt.resumed_idx = opt.saver.load_json('intermediate.json')['scale']
         opt.resume_dir = '/'.join(opt.netG.split('/')[:-1])
         # Load
         if not os.path.isfile(opt.netG):
