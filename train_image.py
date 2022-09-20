@@ -149,13 +149,12 @@ def train(opt, netG):
                     return_list = G_curr(real_zero, opt.Noise_Amps, isRandom=False)
                     z_reconstruction = return_list[0]
                     RMSE = nn.RMSELoss()(real, z_reconstruction)
-                    RMSE = ops.stop_gradient(RMSE)
 
                     opt.noise_amp = opt.noise_amp_init * RMSE / opt.batch_size
                     opt.Noise_Amps[-1] = opt.noise_amp.asnumpy().item()
 
 
-        ## Update parameters
+        ## Train
         if opt.vae_levels >= opt.scale_idx + 1:
             # (1) Update VAE network
             curG_loss = G_train(real, real_zero, noise_init, opt.Noise_Amps, True)
@@ -167,75 +166,48 @@ def train(opt, netG):
         total_loss += curG_loss
 
 
-        ## Update progress bar
+        ## Verbose
+        # Update progress bar
         epoch_iterator.set_description('Scale [{}/{}], Iteration [{}/{}]'.format(
             opt.scale_idx + 1, opt.stop_scale + 1,
             iteration + 1, opt.niter,
         ))
 
-
-        ## Log
+        # Print
         if (iteration + 1) % opt.print_interval == 0:
             if opt.vae_levels >= opt.scale_idx + 1:
-                logging.info(f'[Scale {opt.scale_idx + 1}/Iter {iteration}] Noise amp: {opt.noise_amp}, Gloss: {curG_loss}')
+                logging.info('[Scale {}/Iter {}] Noise amp: {}, Gloss: {}'.format(
+                    opt.scale_idx + 1, iteration + 1, opt.noise_amp, curG_loss
+                ))
             else:
-                logging.info(f'[Scale {opt.scale_idx + 1}/Iter {iteration}] Noise amp: {opt.noise_amp}, Gloss: {curG_loss}, Dloss: {curD_loss}')
+                logging.info('[Scale {}/Iter {}] Noise amp: {}, Gloss: {}, Dloss: {}'.format(
+                    opt.scale_idx + 1, iteration + 1, opt.noise_amp, curG_loss, curD_loss
+                ))
 
-            if opt.visualize:
-                opt.saver.save_images(real, 'real.jpg')
-
-                # if opt.vae_levels < opt.scale_idx + 1:
-                #     opt.saver.save_images(generated, f'generated_{iteration}.jpg')
-                #     opt.saver.save_images(generated_vae, f'generated_vae_{iteration}.jpg')
-
-                if iteration % opt.image_interval == 0:
-                    fake_var = []
-                    fake_vae_var = []
-                    for _ in range(3):
-                        noise_init = utils.generate_noise_ref(noise_init.shape)
-                        noise_init = ops.stop_gradient(noise_init)
-                        return_list = G_curr(noise_init, opt.Noise_Amps, noise_init=noise_init, isRandom=True)
-                        fake_var.append(return_list[0])
-                        fake_vae_var.append(return_list[1])
-                    fake_var = ops.Concat()(fake_var)
-                    fake_vae_var = ops.Concat()(fake_vae_var)
-                    opt.saver.save_images(fake_var, f'fake_var_{iteration}.jpg')
-                    opt.saver.save_images(fake_vae_var, f'fake_vae_var{iteration}.jpg')
-
-
-        ## Virsualize with Tensorboard
-        # if opt.visualize:
-        #     opt.summary.add_scalar('Video/Scale {}/noise_amp'.format(opt.scale_idx), opt.noise_amp, iteration)
-        #     if opt.vae_levels >= opt.scale_idx + 1:
-        #         opt.summary.add_scalar('Video/Scale {}/KLD'.format(opt.scale_idx), kl_loss.item(), iteration)
-        #     else:
-        #         opt.summary.add_scalar('Video/Scale {}/rec loss'.format(opt.scale_idx), rec_loss.item(), iteration)
-        #     opt.summary.add_scalar('Video/Scale {}/noise_amp'.format(opt.scale_idx), opt.noise_amp, iteration)
-        #     if opt.vae_levels < opt.scale_idx + 1:
-        #         opt.summary.add_scalar('Video/Scale {}/errG'.format(opt.scale_idx), errG.item(), iteration)
-        #         opt.summary.add_scalar('Video/Scale {}/errD_fake'.format(opt.scale_idx), errD_fake.item(), iteration)
-        #         opt.summary.add_scalar('Video/Scale {}/errD_real'.format(opt.scale_idx), errD_real.item(), iteration)
-        #     else:
-        #         opt.summary.add_scalar('Video/Scale {}/Rec VAE'.format(opt.scale_idx), rec_vae_loss.item(), iteration)
-
-        #     if iteration % opt.print_interval == 0:
-        #         # with torch.no_grad():
-        #         fake_var = []
-        #         fake_vae_var = []
-        #         for _ in range(3):
-        #             noise_init = utils.generate_noise(ref=noise_init)
-        #             noise_init = ops.stop_gradient(noise_init)
-        #             fake, fake_vae = G_curr(noise_init, opt.Noise_Amps, noise_init=noise_init, mode="rand")
-        #             fake_var.append(fake)
-        #             fake_vae_var.append(fake_vae)
-        #         fake_var = cat(fake_var)
-        #         fake_vae_var = cat(fake_vae_var)
-
-        #         opt.summary.visualize_image(opt, iteration, real, 'Real')
-        #         opt.summary.visualize_image(opt, iteration, generated, 'Generated')
-        #         opt.summary.visualize_image(opt, iteration, generated_vae, 'Generated VAE')
-        #         opt.summary.visualize_image(opt, iteration, fake_var, 'Fake var')
-        #         opt.summary.visualize_image(opt, iteration, fake_vae_var, 'Fake VAE var')
+        # Visualize
+        if opt.visualize:
+            if (iteration + 1) % opt.image_interval == 0:
+                # Real
+                opt.saver.save_image(real, 'real.jpg')
+                # Generated
+                return_list = G_curr(real_zero, opt.Noise_Amps, isRandom=False)
+                generated = return_list[0]
+                generated_vae = return_list[1]
+                opt.saver.save_image(generated, f'generated_{iteration}.jpg')
+                opt.saver.save_image(generated_vae, f'generated_vae_{iteration}.jpg')
+                # Fake
+                fake_var = []
+                fake_vae_var = []
+                for _ in range(3):
+                    noise_init = utils.generate_noise_ref(noise_init.shape)
+                    noise_init = ops.stop_gradient(noise_init)
+                    return_list = G_curr(noise_init, opt.Noise_Amps, noise_init=noise_init, isRandom=True)
+                    fake_var.append(return_list[0])
+                    fake_vae_var.append(return_list[1])
+                fake_var = ops.Concat()(fake_var)
+                fake_vae_var = ops.Concat()(fake_vae_var)
+                opt.saver.save_image(fake_var, f'fake_var_{iteration}.jpg')
+                opt.saver.save_image(fake_vae_var, f'fake_vae_var{iteration}.jpg')
 
     epoch_iterator.close()
 
@@ -348,7 +320,7 @@ if __name__ == '__main__':
     mindspore.set_seed(opt.manualSeed)
 
     # Reconstruction loss
-    opt.rec_loss = nn.RMSELoss()
+    opt.rec_loss = nn.MSELoss()
 
     # Initial parameters
     opt.scale_idx = 0
