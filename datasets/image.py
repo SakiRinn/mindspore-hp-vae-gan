@@ -65,7 +65,7 @@ class SingleImageDataset:
         if hflip:
             images_transformed = np.flip(images_transformed, -1)
         # Normalize
-        images_transformed = Normalize([0.5], [0.5], False)(images_transformed)
+        images_transformed = Normalize([0.5], [0.5])(images_transformed)
 
         return images_transformed
 
@@ -74,7 +74,6 @@ class SingleImageDataset:
                                               self.opt.stop_scale, self.opt.img_size)
         scaled_size = [int(base_size * self.opt.ar), base_size]
         self.opt.scaled_size = scaled_size
-        img = cv2.cvtColor(self.image_full_scale, cv2.COLOR_BGR2RGB)
         img = cv2.resize(img, tuple(scaled_size[::-1]))
         return img
 
