@@ -185,29 +185,28 @@ def train(opt, netG):
                 ))
 
         # Visualize
-        if opt.visualize:
-            if (iteration + 1) % opt.image_interval == 0:
-                # Real
-                opt.saver.save_image(real, 'real.jpg')
-                # Generated
-                return_list = G_curr(real_zero, opt.Noise_Amps, isRandom=False)
-                generated = return_list[0]
-                generated_vae = return_list[1]
-                opt.saver.save_image(generated, f'generated_{iteration}.jpg')
-                opt.saver.save_image(generated_vae, f'generated_vae_{iteration}.jpg')
-                # Fake
-                fake_var = []
-                fake_vae_var = []
-                for _ in range(3):
-                    noise_init = utils.generate_noise_ref(noise_init.shape)
-                    noise_init = ops.stop_gradient(noise_init)
-                    return_list = G_curr(noise_init, opt.Noise_Amps, noise_init=noise_init, isRandom=True)
-                    fake_var.append(return_list[0])
-                    fake_vae_var.append(return_list[1])
-                fake_var = ops.Concat()(fake_var)
-                fake_vae_var = ops.Concat()(fake_vae_var)
-                opt.saver.save_image(fake_var, f'fake_var_{iteration}.jpg')
-                opt.saver.save_image(fake_vae_var, f'fake_vae_var{iteration}.jpg')
+        if opt.visualize and (iteration + 1) % opt.image_interval == 0:
+            # Real
+            opt.saver.save_image(real, f'real_{iteration+1}.jpg')
+            # Generated
+            return_list = G_curr(real_zero, opt.Noise_Amps, isRandom=False)
+            generated = return_list[0]
+            generated_vae = return_list[1]
+            opt.saver.save_image(generated, f'generated_{iteration+1}.jpg')
+            opt.saver.save_image(generated_vae, f'generated_vae_{iteration+1}.jpg')
+            # Fake
+            fake_var = []
+            fake_vae_var = []
+            for _ in range(3):
+                noise_init = utils.generate_noise_ref(noise_init.shape)
+                noise_init = ops.stop_gradient(noise_init)
+                return_list = G_curr(noise_init, opt.Noise_Amps, noise_init=noise_init, isRandom=True)
+                fake_var.append(return_list[0])
+                fake_vae_var.append(return_list[1])
+            fake_var = ops.Concat()(fake_var)
+            fake_vae_var = ops.Concat()(fake_vae_var)
+            opt.saver.save_image(fake_var, f'fake_var_{iteration}.jpg')
+            opt.saver.save_image(fake_vae_var, f'fake_vae_var{iteration}.jpg')
 
     epoch_iterator.close()
 
@@ -278,7 +277,6 @@ if __name__ == '__main__':
     parser.add_argument('--image-interval', type=int, default=100, help='image interval')
     parser.add_argument('--batch-size', type=int, default=2, help='batch size')
     parser.add_argument('--visualize', action='store_true', default=True, help='visualize using tensorboard')
-    # parser.add_argument('--no-cuda', action='store_true', default=False, help='disables cuda')
 
     parser.set_defaults(hflip=False)
     opt = parser.parse_args()

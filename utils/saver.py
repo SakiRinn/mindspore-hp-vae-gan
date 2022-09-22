@@ -67,12 +67,13 @@ class DataSaver:
     def save_image(self, img, filename):
         filename = os.path.join(self.image_dir, filename)
         img = img.asnumpy().squeeze().astype(np.uint8)
-        if img.ndim != 3:
+        if img.ndim == 4 and img.shape[0] == 2:
+            img = img[0]
+        elif img.ndim != 3:
             return
-        if cv2.imwrite(filename, img):
-            print(f'Saving image Successfully at {filename}.')
+        img = img.transpose(2, 1, 0)
+        cv2.imwrite(filename, img)
 
     def save_video(self, array, filename):
         filename = os.path.join(self.eval_dir, filename)
         write_video(array, filename, self.opt)
-        print(f'Saving video Successfully at {filename}.')

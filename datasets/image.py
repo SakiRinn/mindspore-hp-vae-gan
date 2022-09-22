@@ -4,7 +4,7 @@ import imageio
 import cv2
 import logging
 import os
-from mindspore.dataset.vision.c_transforms import Normalize
+from mindspore.dataset.vision import Normalize
 import mindspore.dataset as ds
 
 import sys
@@ -39,9 +39,9 @@ class SingleImageDataset:
         hflip = random.random() < 0.5 if self.opt.hflip else False
 
         images = self.generate_image(self.opt.scale_idx)
-        images = np.array(images).transpose(2, 0, 1).astype(np.float32) \
+        images = np.array(images).transpose(2, 1, 0).astype(np.float32) \
                  if images.ndim == 3 else \
-                 np.array(images).transpose(0, 3, 1, 2).astype(np.float32)
+                 np.array(images).transpose(0, 3, 2, 1).astype(np.float32)
         images = images / 255  # Set range [0, 1]
         images_transformed = self._get_transformed_images(images, hflip)
 
@@ -65,7 +65,7 @@ class SingleImageDataset:
         if hflip:
             images_transformed = np.flip(images_transformed, -1)
         # Normalize
-        images_transformed = Normalize(mean=[0.5], std=[0.5])(images_transformed)
+        images_transformed = Normalize([0.5], [0.5], False)(images_transformed)
 
         return images_transformed
 
@@ -74,7 +74,8 @@ class SingleImageDataset:
                                               self.opt.stop_scale, self.opt.img_size)
         scaled_size = [int(base_size * self.opt.ar), base_size]
         self.opt.scaled_size = scaled_size
-        img = cv2.resize(self.image_full_scale, tuple(scaled_size[::-1]))
+        img = cv2.cvtColor(self.image_full_scale, cv2.COLOR_BGR2RGB)
+        img = cv2.resize(img, tuple(scaled_size[::-1]))
         return img
 
 
@@ -105,4 +106,4 @@ if __name__ == '__main__':
     dataset = dataset.shuffle(4)
     dl = dataset.create_tuple_iterator()
     # 打印数据条数
-    print(next(dl))
+    print(dataset_generator[0][0].shape)
