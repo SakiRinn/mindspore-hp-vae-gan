@@ -39,7 +39,7 @@ class DataSaver:
         if not os.path.exists(self.eval_dir):
             os.makedirs(self.eval_dir)
 
-        self.image_dir = os.path.join(self.eval_dir, "images")
+        self.image_dir = os.path.join(self.experiment_dir, "img")
         if not os.path.exists(self.image_dir):
             os.makedirs(self.image_dir)
 

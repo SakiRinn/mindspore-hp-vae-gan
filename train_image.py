@@ -22,6 +22,7 @@ def train(opt, netG):
     ############
     ### INIT ###
     ############
+    # profiler = mindspore.Profiler()
 
     ## Current Networks
     D_curr = getattr(networks_2d, opt.discriminator)(opt)
@@ -106,7 +107,6 @@ def train(opt, netG):
         "postfix": True
     }
     epoch_iterator = tools.create_progressbar(**progressbar_args)
-
 
 
     #############
@@ -209,6 +209,7 @@ def train(opt, netG):
             opt.saver.save_image(fake_vae_var, f'fake_vae_var{iteration}.jpg')
 
     epoch_iterator.close()
+    # profiler.analyse()
 
 
     ## Save data
@@ -219,7 +220,7 @@ def train(opt, netG):
 
 
 if __name__ == '__main__':
-    context.set_context(mode=0, device_id=3)
+    context.set_context(mode=0, device_id=1)
 
     ## Parser
     parser = argparse.ArgumentParser()
@@ -327,8 +328,8 @@ if __name__ == '__main__':
 
     # Dataset
     dataset = SingleImageDataset(opt)
-    data_loader = GeneratorDataset(dataset, ['data', 'zero-scale data'], shuffle=True)
-    data_loader = data_loader.batch(opt.batch_size)
+    data_loader = GeneratorDataset(dataset, ['data', 'zero-scale data'], shuffle=True, num_parallel_workers=4)
+    data_loader = data_loader.batch(opt.batch_size, num_parallel_workers=4)
     data_loader = data_loader.shuffle(4)
 
     if opt.stop_scale_time == -1:

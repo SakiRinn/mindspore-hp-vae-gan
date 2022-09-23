@@ -25,7 +25,7 @@ class SingleImageDataset:
             exit(0)
 
         # Get original frame size and aspect-ratio
-        self.image_full_scale = imageio.imread(self.image_path)[:, :, :3]
+        self.image_full_scale = imageio.imread(self.image_path)[:, :, :3]   # HWC
         self.org_size = [self.image_full_scale.shape[0], self.image_full_scale.shape[1]]
         h, w = self.image_full_scale.shape[:2]
         opt.ar = h / w  # H2W
@@ -39,9 +39,9 @@ class SingleImageDataset:
         hflip = random.random() < 0.5 if self.opt.hflip else False
 
         images = self.generate_image(self.opt.scale_idx)
-        images = np.array(images).transpose(2, 1, 0).astype(np.float32) \
+        images = np.array(images).transpose(2, 0, 1).astype(np.float32) \
                  if images.ndim == 3 else \
-                 np.array(images).transpose(0, 3, 2, 1).astype(np.float32)
+                 np.array(images).transpose(0, 3, 1, 2).astype(np.float32)
         images = images / 255  # Set range [0, 1]
         images_transformed = self._get_transformed_images(images, hflip)
 
@@ -54,9 +54,9 @@ class SingleImageDataset:
             images_zero_scale = images_zero_scale / 255
             images_zero_scale_transformed = self._get_transformed_images(images_zero_scale, hflip)
 
-            return [images_transformed, images_zero_scale_transformed]
+            return images_transformed, images_zero_scale_transformed
 
-        return [images_transformed, np.zeros_like(images_transformed)]
+        return images_transformed, np.zeros_like(images_transformed)
 
     @staticmethod
     def _get_transformed_images(images, hflip):
@@ -74,7 +74,7 @@ class SingleImageDataset:
                                               self.opt.stop_scale, self.opt.img_size)
         scaled_size = [int(base_size * self.opt.ar), base_size]
         self.opt.scaled_size = scaled_size
-        img = cv2.resize(img, tuple(scaled_size[::-1]))
+        img = cv2.resize(self.image_full_scale, tuple(scaled_size[::-1]))
         return img
 
 
