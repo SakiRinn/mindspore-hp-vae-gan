@@ -12,7 +12,7 @@ from . import video_to_frames
 normalize = Normalize(mean=[0.5], std=[0.5])
 
 
-class SingleVideoDataset(ds.Dataset):
+class SingleVideoDataset:
     def __init__(self, opt, transforms=None):
         super(SingleVideoDataset, self).__init__()
 
@@ -51,7 +51,7 @@ class SingleVideoDataset(ds.Dataset):
         hflip = random.random() < 0.5 if self.opt.hflip else False
         every = self.opt.sampling_rates[self.opt.fps_index]
 
-        self.generate_frames(opt.scale_idx)
+        self.generate_frames(self.opt.scale_idx)
         frames = self.frames[idx:idx + self.opt.fps_lcm + 1:every]
         frames = np.array(frames).transpose(2, 0, 1).astype(np.float32) \
                     if frames.ndim == 3 else \
@@ -71,7 +71,7 @@ class SingleVideoDataset(ds.Dataset):
 
             return [frames_transformed, frames_zero_scale_transformed]
 
-        return frames_transformed
+        return frames_transformed, np.zeros_like(frames_transformed)
 
     @staticmethod
     def _get_transformed_frames(frames, hflip):

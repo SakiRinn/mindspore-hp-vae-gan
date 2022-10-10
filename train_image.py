@@ -60,32 +60,24 @@ def train(opt, netG):
             parameter_list += [{"params": netG.encode.trainable_params(),
                                 "lr": opt.lr_g * (opt.lr_scale ** opt.scale_idx)},
                                {"params": netG.decoder.trainable_params(),
-                                "lr": opt.lr_g * (opt.lr_scale ** opt.scale_idx)}
-            ]
-            parameter_list += [
-                {"params": block.trainable_params(),
-                 "lr": opt.lr_g * (opt.lr_scale ** (len(netG.body[-opt.train_depth:]) - 1 - idx))}
-                for idx, block in enumerate(netG.body[-opt.train_depth:])
-            ]
+                                "lr": opt.lr_g * (opt.lr_scale ** opt.scale_idx)}]
+            parameter_list += [{"params": block.trainable_params(),
+                                "lr": opt.lr_g * (opt.lr_scale ** (len(netG.body[-opt.train_depth:]) - 1 - idx))}
+                               for idx, block in enumerate(netG.body[-opt.train_depth:])]
     else:
         # (2) train all
         if len(netG.body) < opt.train_depth:
             parameter_list += [{"params": netG.encode.trainable_params(),
                                 "lr": opt.lr_g * (opt.lr_scale ** opt.scale_idx)},
                                {"params": netG.decoder.trainable_params(),
-                                "lr": opt.lr_g * (opt.lr_scale ** opt.scale_idx)}
-            ]
-            parameter_list += [
-                {"params": block.trainable_params(),
-                 "lr": opt.lr_g * (opt.lr_scale ** (len(netG.body) - 1 - idx))}
-                for idx, block in enumerate(netG.body)
-            ]
+                                "lr": opt.lr_g * (opt.lr_scale ** opt.scale_idx)}]
+            parameter_list += [{"params": block.trainable_params(),
+                                "lr": opt.lr_g * (opt.lr_scale ** (len(netG.body) - 1 - idx))}
+                               for idx, block in enumerate(netG.body)]
         else:
-            parameter_list += [
-                {"params": block.trainable_params(),
-                 "lr": opt.lr_g * (opt.lr_scale ** (len(netG.body[-opt.train_depth:]) - 1 - idx))}
-                for idx, block in enumerate(netG.body[-opt.train_depth:])
-            ]
+            parameter_list += [{"params": block.trainable_params(),
+                                "lr": opt.lr_g * (opt.lr_scale ** (len(netG.body[-opt.train_depth:]) - 1 - idx))}
+                               for idx, block in enumerate(netG.body[-opt.train_depth:])]
 
     # Optimizer
     optimizerG = ClippedAdam(opt, parameter_list, opt.lr_g, beta1=opt.beta1, beta2=0.999)
@@ -131,7 +123,7 @@ def train(opt, netG):
 
         initial_size = utils.get_scales_by_index(0, opt.scale_factor, opt.stop_scale, opt.img_size)
         initial_size = [int(initial_size * opt.ar), initial_size]
-        opt.Z_init_size = [opt.batch_size, opt.latent_dim, *initial_size]
+        opt.Z_init_size = [opt.batch_size, opt.latent_dim] + initial_size
 
         noise_init = utils.generate_noise_size(opt.Z_init_size)
 
@@ -177,12 +169,10 @@ def train(opt, netG):
         if (iteration + 1) % opt.print_interval == 0:
             if opt.vae_levels >= opt.scale_idx + 1:
                 logging.debug('[Scale {}/Iter {}] Noise amp: {}, Gloss: {}'.format(
-                    opt.scale_idx + 1, iteration + 1, opt.noise_amp, curG_loss
-                ))
+                    opt.scale_idx + 1, iteration + 1, opt.noise_amp, curG_loss))
             else:
                 logging.debug('[Scale {}/Iter {}] Noise amp: {}, Gloss: {}, Dloss: {}'.format(
-                    opt.scale_idx + 1, iteration + 1, opt.noise_amp, curG_loss, curD_loss
-                ))
+                    opt.scale_idx + 1, iteration + 1, opt.noise_amp, curG_loss, curD_loss))
 
         # Visualize
         if opt.visualize and (iteration + 1) % opt.image_interval == 0:
