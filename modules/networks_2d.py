@@ -4,9 +4,9 @@ import numpy as np
 import mindspore.nn as nn
 import mindspore.ops as ops
 from mindspore.ops import constexpr
-from mindspore import Tensor, context, Parameter
+from mindspore import Tensor, context
 from mindspore import dtype as mstype
-from mindspore.common.initializer import Normal, Zero
+from mindspore.common.initializer import Normal
 
 import sys
 sys.path.insert(0, '.')

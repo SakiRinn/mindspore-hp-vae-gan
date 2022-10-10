@@ -277,7 +277,7 @@ if __name__ == '__main__':
     parser.add_argument('--print-interval', type=int, default=10, help='print interval')
     parser.add_argument('--image-interval', type=int, default=100, help='image interval')
     parser.add_argument('--batch-size', type=int, default=2, help='batch size')
-    parser.add_argument('--visualize', action='store_true', default=True, help='visualize using tensorboard')
+    parser.add_argument('--visualize', action='store_true', default=False, help='visualize using tensorboard')
 
     parser.set_defaults(hflip=False)
     opt = parser.parse_args()

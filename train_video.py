@@ -349,7 +349,7 @@ if __name__ == '__main__':
     mindspore.set_seed(opt.manualSeed)
 
     # Reconstruction loss
-    opt.rec_loss = nn.RMSELoss()
+    opt.rec_loss = nn.MSELoss()
 
     # Initial parameters
     opt.scale_idx = 0

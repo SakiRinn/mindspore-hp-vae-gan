@@ -1,32 +1,18 @@
 from __future__ import absolute_import, division, print_function
+import numpy as np
 
-import copy
 import mindspore.nn as nn
-import mindspore.nn.probability.distribution as msd
 import mindspore.ops as ops
 from mindspore import Tensor
 from mindspore import dtype as mstype
-from mindspore import nn
+from mindspore.ops import constexpr
 from mindspore.common.initializer import Normal, Zero
 from mindspore import context
-
 
 import sys
 sys.path.insert(0, '.')
 import datasets
 import utils
-
-context.set_context(device_target='Ascend', device_id=7, mode=context.PYNATIVE_MODE)
-
-
-matmul = ops.MatMul()
-exp = ops.Exp()
-log = ops.Log()
-tanh = ops.Tanh()
-sigmoid = ops.Sigmoid()
-adaptive_avg_pool_2d = ops.AdaptiveAvgPool2D(1)
-bernoulli = msd.Bernoulli(0.5)
-uniform = msd.Uniform(0, 1)
 
 
 def get_activation(act):
@@ -35,29 +21,27 @@ def get_activation(act):
         "lrelu": nn.LeakyReLU(),
         "elu": nn.ELU(),
         "prelu": nn.PReLU(),
-        # "selu": ops.SeLU()
+        "selu": ops.SeLU()
     }
     return activations[act]
 
 
-def reparameterize(mu, logvar, training):
-    if training:
-        std = exp(logvar * 0.5)
-        eps = Tensor(shape=std.shape, init=Normal(), dtype=mstype.float32)
-        return matmul(eps, std) + (mu)
-    else:
-        return Tensor(shape=mu.shape, init=Normal(), dtype=mstype.float32)
+@constexpr(reuse_result=False)
+def reparam(std_shape):
+    return Tensor(np.random.normal(size=std_shape).astype('float32'))
 
+@constexpr(reuse_result=False)
+def reparam_pred(mu_shape):
+    return Tensor(np.random.normal(size=mu_shape).astype('float32'))
 
-def reparameterize_bern(x, training):
-    if training:
-        eps = uniform.prob(Tensor(shape=x.shape, init=Zero(), dtype=mstype.float32))
-        return log(x + 1e-20) - log(-log(eps + 1e-20) + 1e-20)
-    else:
-        return bernoulli.prob(Tensor(shape=x.shape, init=Zero(), dtype=mstype.float32))
+@constexpr(reuse_result=False)
+def reparam_bern(bern_shape):
+    return Tensor(np.random.uniform(0, 1, size=bern_shape).astype('float32'))
 
+@constexpr(reuse_result=False)
+def reparam_pred_bern(bern_shape):
+    return Tensor(np.random.binomial(1, 0.5, size=bern_shape).astype('float32'))
 
-# Basic blocks
 
 class ConvBlock3D(nn.SequentialCell):
     def __init__(self, in_channel, out_channel, ker_size, padding, stride, bn=True, act='lrelu'):
@@ -110,7 +94,8 @@ class Encode3DVAE(nn.Cell):
         if out_dim is None:
             output_dim = opt.nfc
         else:
-            assert type(out_dim) is int
+            if not isinstance(out_dim, int):
+                exit(1)
             output_dim = out_dim
 
         self.features = FeatureExtractor(opt.nc_im, opt.nfc, opt.ker_size, opt.ker_size // 2, 1,
@@ -135,23 +120,20 @@ class Encode3DVAE_nb(nn.Cell):
         if out_dim is None:
             output_dim = opt.nfc
         else:
-            assert type(out_dim) is int
+            if not isinstance(out_dim, int):
+                exit(1)
             output_dim = out_dim
 
-        self.features = FeatureExtractor(opt.nc_im, opt.nfc, opt.ker_size,
-                                         opt.ker_size // 2, 1, num_blocks=num_blocks)
-        self.mu = ConvBlock3D(opt.nfc, output_dim, opt.ker_size,
-                              opt.ker_size // 2, 1, bn=False, act=None)
-        self.logvar = ConvBlock3D(opt.nfc, output_dim, opt.ker_size,
-                                  opt.ker_size // 2, 1, bn=False, act=None)
-
+        self.features = FeatureExtractor(opt.nc_im, opt.nfc, opt.ker_size, opt.ker_size // 2, 1, num_blocks=num_blocks)
+        self.mu = ConvBlock3D(opt.nfc, output_dim, opt.ker_size, opt.ker_size // 2, 1, bn=False, act=None)
+        self.logvar = ConvBlock3D(opt.nfc, output_dim, opt.ker_size, opt.ker_size // 2, 1, bn=False, act=None)
         self.bern = ConvBlock3D(opt.nfc, 1, opt.ker_size, opt.ker_size // 2, 1, bn=False, act=None)
 
     def construct(self, x):
         reduce_mean = ops.ReduceMean(keep_dims=True)
 
         features = self.features(x)
-        bern = sigmoid(self.bern(features))
+        bern = ops.Sigmoid()(self.bern(features))
         features = bern * features
         mu = reduce_mean(self.mu(features), 2)     # nn.AdaptiveAvgPool3D(1)
         mu = reduce_mean(mu, 3)
@@ -170,7 +152,8 @@ class Encode3DVAE1x1(nn.Cell):
         if out_dim is None:
             output_dim = opt.nfc
         else:
-            assert type(out_dim) is int
+            if not isinstance(out_dim, int):
+                exit(1)
             output_dim = out_dim
 
         self.features = FeatureExtractor(opt.nc_im, opt.nfc, 1, 0, 1, num_blocks=2)
@@ -192,8 +175,7 @@ class WDiscriminator3D(nn.Cell):
         self.opt = opt
         N = int(opt.nfc)
 
-        self.head = ConvBlock3DSN(opt.nc_im, N, opt.ker_size, opt.ker_size // 2,
-                                  stride=1, bn=True, act='lrelu')
+        self.head = ConvBlock3DSN(opt.nc_im, N, opt.ker_size, opt.ker_size // 2, stride=1, bn=True, act='lrelu')
 
         body = []
         for _ in range(opt.num_layer):
@@ -222,15 +204,12 @@ class WDiscriminatorBaselines(nn.Cell):
                     (self.opt.num_layer + 2, self.opt.num_layer + 2),
                     (self.opt.num_layer + 2, self.opt.num_layer + 2))
 
-        self.head = ConvBlock3D(opt.nc_im, N, opt.ker_size, opt.padd_size,
-                                stride=1, bn=False, act='lrelu')
+        self.head = ConvBlock3D(opt.nc_im, N, opt.ker_size, opt.padd_size, stride=1, bn=False, act='lrelu')
 
         body = []
         for _ in range(opt.num_layer):
-            body.append(ConvBlock3D(N, N, opt.ker_size, opt.padd_size,
-                                    stride=1, bn=True, act='lrelu'))
+            body.append(ConvBlock3D(N, N, opt.ker_size, opt.padd_size, stride=1, bn=True, act='lrelu'))
         self.body = nn.SequentialCell(body)
-
         self.tail = nn.Conv3d(N, 1, kernel_size=opt.ker_size, padding=opt.padd_size, stride=1,
                               weight_init=Normal(0.02, 0.0), pad_mode='pad', has_bias=True)
 
@@ -251,8 +230,7 @@ class GeneratorCSG(nn.Cell):
         self.opt = opt
         N = int(opt.nfc)
 
-        self.p3d_once = ((0, 0), (0, 0),
-                         (1, 1), (1, 1), (1, 1))
+        self.p3d_once = ((0, 0), (0, 0), (1, 1), (1, 1), (1, 1))
         self.p3d = ((0, 0), (0, 0),
                     (self.opt.num_layer + 0, self.opt.num_layer + 0),
                     (self.opt.num_layer + 0, self.opt.num_layer + 0),
@@ -275,7 +253,7 @@ class GeneratorCSG(nn.Cell):
 
 
     def init_next_stage(self):
-        self.body.append(copy.deepcopy(self.body[-1]))
+        self.body.append(self.body[-1])
 
     def construct(self, noise_init, noise_amp, mode='rand'):
         pad_op1 = ops.Pad(self.p3d_once)
@@ -330,14 +308,14 @@ class GeneratorSG(nn.Cell):
 
 
     def init_next_stage(self):
-        self.body.append(copy.deepcopy(self.body[-1]))
+        self.body.append(self.body[-1])
 
     def construct(self, noise_init, noise_amp, mode='rand'):
         pad_op = ops.Pad(self.p3d)
         x_prev_out = self.body[0](pad_op(noise_init))
 
         for idx, block in enumerate(self.body[1:], 1):
-            x_prev_out = tanh(x_prev_out)
+            x_prev_out = ops.Tanh()(x_prev_out)
 
             # Upscale
             x_prev_out_up = utils.upscale(x_prev_out, idx, self.opt)
@@ -355,17 +333,25 @@ class GeneratorSG(nn.Cell):
                 x_prev = block(pad_op(x_prev_out_up))
             x_prev_out = x_prev + x_prev_out_up
 
-        out = tanh(x_prev_out)
+        out = ops.Tanh()(x_prev_out)
         return out
 
 
 class GeneratorHPVAEGAN(nn.Cell):
-    def __init__(self, opt):
+    def __init__(self, opt, is_training=False):
         super(GeneratorHPVAEGAN, self).__init__()
 
         self.opt = opt
+        self.scale_factor = opt.scale_factor
+        self.stop_scale = opt.stop_scale
+        self.img_size = opt.img_size
+        self.ar = opt.ar
+        self.vae_levels = opt.vae_levels
+        self.train_all = opt.train_all
+
         N = int(opt.nfc)
         self.N = N
+        self.is_training = is_training
 
         self.encode = Encode3DVAE(opt, out_dim=opt.latent_dim, num_blocks=opt.enc_blocks)
 
@@ -400,7 +386,7 @@ class GeneratorHPVAEGAN(nn.Cell):
                                           weight_init=Normal(0.02, 0.0), pad_mode='pad', has_bias=True))
             self.body.append(_first_stage)
         else:
-            self.body.append(copy.deepcopy(self.body[-1]))
+            self.body.append(self.body[-1])
 
     def construct(self, video, noise_amp, noise_init=None, sample_init=None, randMode=False):
         if sample_init is not None:
@@ -409,7 +395,12 @@ class GeneratorHPVAEGAN(nn.Cell):
 
         if noise_init is None:
             mu, logvar = self.encode(video)
-            z_vae = reparameterize(mu, logvar, self.training)
+            if self.is_training:
+                std = ops.Exp()(logvar * 0.5)
+                eps = reparam(std.shape)
+                z_vae = ops.Mul()(eps, std) + mu
+            else:
+                z_vae = reparam_pred(mu.shape)
         else:
             z_vae = noise_init
 
@@ -440,7 +431,7 @@ class GeneratorHPVAEGAN(nn.Cell):
             else:
                 x_prev = block(x_prev_out_up)
 
-            x_prev_out = tanh(x_prev + x_prev_out_up)
+            x_prev_out = ops.Tanh()(x_prev + x_prev_out_up)
 
         return x_prev_out
 
@@ -481,7 +472,7 @@ class GeneratorVAE_nb(nn.Cell):
                                           weight_init=Normal(0.02, 0.0), pad_mode='pad', has_bias=True))
             self.body.append(_first_stage)
         else:
-            self.body.append(copy.deepcopy(self.body[-1]))
+            self.body.append(self.body[-1])
 
     def construct(self, video, noise_amp,
                   noise_init_norm=None, noise_init_bern=None, sample_init=None, randMode=False):
@@ -491,13 +482,23 @@ class GeneratorVAE_nb(nn.Cell):
 
         if noise_init_norm is None:
             mu, logvar, bern = self.encode(video)
-            z_vae_norm = reparameterize(mu, logvar, self.training)
-            z_vae_bern = reparameterize_bern(bern, self.training)
+            if self.is_training:
+                # Norm
+                std = ops.Exp()(logvar * 0.5)
+                eps = reparam(std.shape)
+                z_vae_norm = ops.Mul()(eps, std) + mu
+                # Bern
+                log = ops.Log()
+                eps = reparam_bern(bern.shape)
+                z_vae_bern = log(bern + 1e-20) - log(-log(eps + 1e-20) + 1e-20)
+            else:
+                z_vae_norm = reparam_pred(mu.shape)
+                z_vae_bern = reparam_pred_bern(bern.shape)
         else:
             z_vae_norm = noise_init_norm
             z_vae_bern = noise_init_bern
 
-        vae_out = tanh(self.decoder(z_vae_norm * z_vae_bern))
+        vae_out = ops.Tanh()(self.decoder(z_vae_norm * z_vae_bern))
 
         if sample_init is not None:
             x_prev_out = self.refinement_layers(sample_init[0], sample_init[1], noise_amp, randMode)
@@ -524,12 +525,14 @@ class GeneratorVAE_nb(nn.Cell):
             else:
                 x_prev = block(x_prev_out_up)
 
-            x_prev_out = tanh(x_prev + x_prev_out_up)
+            x_prev_out = ops.Tanh()(x_prev + x_prev_out_up)
 
         return x_prev_out
 
 
 if __name__ == '__main__':
+    context.set_context(device_target='Ascend', device_id=7, mode=context.PYNATIVE_MODE)
+
     class Opt:
         def __init__(self):
             self.nfc = 64
