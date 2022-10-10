@@ -176,11 +176,11 @@ def train(opt, netG):
         # Print
         if (iteration + 1) % opt.print_interval == 0:
             if opt.vae_levels >= opt.scale_idx + 1:
-                logging.info('[Scale {}/Iter {}] Noise amp: {}, Gloss: {}'.format(
+                logging.debug('[Scale {}/Iter {}] Noise amp: {}, Gloss: {}'.format(
                     opt.scale_idx + 1, iteration + 1, opt.noise_amp, curG_loss
                 ))
             else:
-                logging.info('[Scale {}/Iter {}] Noise amp: {}, Gloss: {}, Dloss: {}'.format(
+                logging.debug('[Scale {}/Iter {}] Noise amp: {}, Gloss: {}, Dloss: {}'.format(
                     opt.scale_idx + 1, iteration + 1, opt.noise_amp, curG_loss, curD_loss
                 ))
 

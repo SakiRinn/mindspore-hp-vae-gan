@@ -7,8 +7,8 @@ from mindspore.common import ms_function
 from mindspore.ops import constexpr
 
 import numpy as np  # TODO: 替代三线性插值，待移除
-import torch
-import torch.nn.functional as F
+# import torch
+# import torch.nn.functional as F
 
 __all__ = ['interpolate', 'interpolate_3D', 'adjust_scales2image',
            'generate_noise_size', 'generate_noise_ref','get_scales_by_index',
