@@ -9,7 +9,7 @@ def video_to_frames(opt):
 
     video_dir, video_filename = os.path.split(opt.video_path)
 
-    logging.debug(f"Extracting frames from {video_filename}, at size ({opt.scaled_size[0]}, {opt.scaled_size[1]})")
+    # logging.debug(f"Extracting frames from {video_filename}, at size ({opt.scaled_size[0]}, {opt.scaled_size[1]})")
 
     capture = cv2.VideoCapture(opt.video_path)
     total_frames = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
