@@ -1,14 +1,13 @@
+from .trilinear import UpsampleTrilinear3D
 import math
+import numpy as np
+
 from mindspore import Tensor
+from mindspore import dtype as mstype
+from mindspore.ops import constexpr
 import mindspore.ops as ops
 from mindspore.common.initializer import Zero
-from mindspore import dtype as mstype
-from mindspore.common import ms_function
-from mindspore.ops import constexpr
 
-import numpy as np  # TODO: 替代三线性插值，待移除
-# import torch
-# import torch.nn.functional as F
 
 __all__ = ['interpolate', 'interpolate_3D', 'adjust_scales2image',
            'generate_noise_size', 'generate_noise_ref','get_scales_by_index',
@@ -39,7 +38,7 @@ def generate_noise_ref(ref_shape, type='normal'):
 
 
 def interpolate(input, size=None):
-    resize_bilinear = ops.ResizeBilinear(size, align_corners=True)    # TODO: align_corners
+    resize_bilinear = ops.ResizeBilinear(size, align_corners=True)
     if input.ndim == 5:
         b, c, t, h0, w0 = input.shape
         img = input.transpose(0, 2, 1, 3, 4).reshape(input.shape[0] + input.shape[1], *input.shape[2:])  # (B+T)CHW
@@ -53,15 +52,10 @@ def interpolate(input, size=None):
 
 
 def interpolate_3D(input, size=None):
-    if input.dim() != 5:
+    if input.ndim != 5:
         exit(1)
-    # resize_bilinear = ops.ResizeTrilinear(size, align_corners=True)
-    # scaled = resize_bilinear(input)
-
-    input = input.asnumpy()
-    input = torch.Tensor(input)
-    scaled = F.interpolate(input, size=size, align_corners=True).to(np.float32)
-    scaled = Tensor(scaled)
+    resize_trilinear = UpsampleTrilinear3D(size, align_corners=True)
+    scaled = resize_trilinear(input)
 
     return scaled
 
@@ -82,29 +76,29 @@ def get_scales_by_index(index, scale_factor, stop_scale, img_size):
     return s_size
 
 
-def get_fps_by_index(index, opt):
+def get_fps_by_index(index, stop_scale_time, sampling_rates, org_fps):
     # Linear fps interpolation by divisors
-    fps_index = int((index / opt.stop_scale_time) * (len(opt.sampling_rates) - 1))
+    fps_index = int((index / stop_scale_time) * (len(sampling_rates) - 1))
 
-    return opt.org_fps / opt.sampling_rates[fps_index], fps_index
+    return org_fps / sampling_rates[fps_index], fps_index
 
 
-def get_fps_td_by_index(index, opt):
-    fps, fps_index = get_fps_by_index(index, opt)
+def get_fps_td_by_index(index, stop_scale_time, sampling_rates, org_fps, fps_lcm):
+    fps, fps_index = get_fps_by_index(index, stop_scale_time, sampling_rates, org_fps)
 
-    every = opt.sampling_rates[fps_index]
-    time_depth = opt.fps_lcm // every + 1
+    every = sampling_rates[fps_index]
+    time_depth = fps_lcm // every + 1
 
     return fps, time_depth, fps_index
 
 
-def upscale(video, index, opt):
+def upscale(video, index, scale_factor, stop_scale, img_size,
+            stop_scale_time, sampling_rates, org_fps, fps_lcm, ar):
     if index <= 0:
         exit(1)
-
-    next_shape = get_scales_by_index(index, opt.scale_factor, opt.stop_scale, opt.img_size)
-    next_fps, next_td, _ = get_fps_td_by_index(index, opt)
-    next_shape = [next_td, int(next_shape * opt.ar), next_shape]
+    next_shape = get_scales_by_index(index, scale_factor, stop_scale, img_size)
+    next_fps, next_td, _ = get_fps_td_by_index(index, stop_scale_time, sampling_rates, org_fps, fps_lcm)
+    next_shape = [next_td, int(next_shape * ar), next_shape]
 
     # Video interpolation
     vid_up = interpolate_3D(video, size=next_shape)
