@@ -77,8 +77,7 @@ class FeatureExtractor(nn.SequentialCell):
         for _ in range(num_blocks - 1):
             self.append(ConvBlock2DSN(out_channel, out_channel, ker_size, padding, stride))
         if return_linear:
-            self.append(ConvBlock2DSN(out_channel, out_channel, ker_size,
-                                      padding, stride, bn=False, act=None))
+            self.append(ConvBlock2DSN(out_channel, out_channel, ker_size, padding, stride, bn=False, act=None))
         else:
             self.append(ConvBlock2DSN(out_channel, out_channel, ker_size, padding, stride))
 
