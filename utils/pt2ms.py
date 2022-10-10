@@ -1,8 +1,5 @@
 from collections import OrderedDict
 import re
-import yaml
-import sys
-sys.path.append(".")
 
 import mindspore
 from mindspore import Tensor, Parameter
