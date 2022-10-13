@@ -221,18 +221,24 @@ class GeneratorHPVAEGAN(nn.Cell):
         self.body = nn.CellList([])
 
     def init_next_stage(self):
+        _new_stage = nn.SequentialCell([ConvBlock2D(self.opt.nc_im, self.N, self.opt.ker_size,
+                                                      self.opt.padd_size, stride=1)])
+        for _ in range(self.opt.num_layer):
+            block = ConvBlock2D(self.N, self.N, self.opt.ker_size, self.opt.padd_size, stride=1)
+            _new_stage.append(block)
+        _new_stage.append(nn.Conv2d(self.N, self.opt.nc_im, self.opt.ker_size,
+                                      stride=1, padding=self.opt.ker_size // 2,
+                                      weight_init=Normal(0.02, 0.0), pad_mode='pad', has_bias=True))
         if len(self.body) == 0:
-            _first_stage = nn.SequentialCell([ConvBlock2D(self.opt.nc_im, self.N, self.opt.ker_size,
-                                                          self.opt.padd_size, stride=1)])
-            for _ in range(self.opt.num_layer):
-                block = ConvBlock2D(self.N, self.N, self.opt.ker_size, self.opt.padd_size, stride=1)
-                _first_stage.append(block)
-            _first_stage.append(nn.Conv2d(self.N, self.opt.nc_im, self.opt.ker_size,
-                                          stride=1, padding=self.opt.ker_size // 2,
-                                          weight_init=Normal(0.02, 0.0), pad_mode='pad', has_bias=True))
-            self.body = nn.CellList([_first_stage])
+            self.body = nn.CellList([_new_stage])
         else:
-            self.body.append(self.body[-1])
+            _last_stage = self.body[-1]
+            for old, new in zip(_last_stage.trainable_params(), _new_stage.trainable_params()):
+                if isinstance(new.data, Tensor):
+                    new.set_data(old.data)
+            self.body.append(_new_stage)
+
+
 
     def construct(self, video, noise_amp, noise_init=None, sample_init=None, isRandom=False):
         if sample_init is not None:

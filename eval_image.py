@@ -78,7 +78,7 @@ def eval(opt, netG):
 
 
 if __name__ == '__main__':
-    context.set_context(mode=0, device_id=5)
+    context.set_context(mode=0, device_id=6)
 
     # Argument Parser
     parser = argparse.ArgumentParser()
@@ -165,6 +165,7 @@ if __name__ == '__main__':
         checkpoint = mindspore.load_checkpoint(opt.netG)
         for _ in range(opt.scale_idx):
             netG.init_next_stage()
+        print(checkpoint)
         mindspore.load_param_into_net(netG, checkpoint)
 
         ## Eval
