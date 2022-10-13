@@ -77,8 +77,7 @@ class FeatureExtractor(nn.SequentialCell):
         for _ in range(num_blocks - 1):
             self.append(ConvBlock2DSN(out_channel, out_channel, ker_size, padding, stride))
         if return_linear:
-            self.append(ConvBlock2DSN(out_channel, out_channel, ker_size,
-                                      padding, stride, bn=False, act=None))
+            self.append(ConvBlock2DSN(out_channel, out_channel, ker_size, padding, stride, bn=False, act=None))
         else:
             self.append(ConvBlock2DSN(out_channel, out_channel, ker_size, padding, stride))
 
@@ -168,14 +167,16 @@ class WDiscriminator2D(nn.Cell):
 
         self.head = ConvBlock2DSN(opt.nc_im, N, opt.ker_size,
                                   opt.ker_size // 2, stride=1, bn=True, act='lrelu')
+
+        # FIXME: Name BUG.
         self.body = nn.SequentialCell([ConvBlock2DSN(N, N, opt.ker_size,
                                        opt.ker_size // 2, stride=1, bn=True, act='lrelu')])
         for _ in range(opt.num_layer - 1):
             self.body.append(ConvBlock2DSN(N, N, opt.ker_size,
                              opt.ker_size // 2, stride=1, bn=True, act='lrelu'))
+
         self.tail = nn.Conv2d(N, 1, kernel_size=opt.ker_size, padding=1, stride=1,
-                              weight_init=Normal(0.02, 0.0),
-                              pad_mode='pad', has_bias=True)
+                              weight_init=Normal(0.02, 0.0), pad_mode='pad', has_bias=True)
 
     def construct(self, x):
         head = self.head(x)
@@ -275,9 +276,7 @@ class GeneratorHPVAEGAN(nn.Cell):
             if self.vae_levels == idx + 1 and not self.train_all:
                 x_prev_out = ops.stop_gradient(x_prev_out)
             # Upscale
-            x_prev_out_up = utils.upscale_2d(x_prev_out, idx + 1,
-                                             self.scale_factor, self.stop_scale,
-                                             self.img_size, self.ar)
+            x_prev_out_up = utils.upscale_2d(x_prev_out, idx + 1, self.scale_factor, self.stop_scale, self.img_size, self.ar)
             # Whether add noise
             if isRandom:
                 # Yes - in random mode
@@ -304,35 +303,30 @@ class GeneratorVAE_nb(nn.Cell):
 
         N = int(opt.nfc)
         self.N = N
-        self.is_training = self.is_training = is_training
+        self.is_training = is_training
 
         self.encode = Encode2DVAE_nb(opt, out_dim=opt.latent_dim, num_blocks=opt.enc_blocks)
 
         # Normal Decoder
         decoder = nn.SequentialCell([ConvBlock2D(opt.latent_dim, N, opt.ker_size, opt.padd_size, stride=1)])
         for _ in range(opt.num_layer):
-            block = ConvBlock2D(N, N, opt.ker_size, opt.padd_size, stride=1)
-            decoder.append(block)
-        decoder.append(nn.Conv2d(N, opt.nc_im, opt.ker_size, stride=1,
-                                 padding=opt.ker_size // 2, weight_init=Normal(0.02, 0.0),
-                                 pad_mode='pad', has_bias=True))
+            decoder.append(ConvBlock2D(N, N, opt.ker_size, opt.padd_size, stride=1))
+        decoder.append(nn.Conv2d(N, opt.nc_im, opt.ker_size, stride=1, padding=opt.ker_size // 2,
+                                 weight_init=Normal(0.02, 0.0), pad_mode='pad', has_bias=True))
         self.decoder = decoder
 
         self.body = nn.CellList([])
 
     def init_next_stage(self):
         if len(self.body) == 0:
-            _first_stage = nn.SequentialCell([])
-            _first_stage.append(ConvBlock2D(self.opt.nc_im, self.N,
-                                            self.opt.ker_size, self.opt.padd_size, stride=1))
+            _first_stage = nn.SequentialCell([ConvBlock2D(self.opt.nc_im, self.N, self.opt.ker_size,
+                                                          self.opt.padd_size, stride=1)])
             for _ in range(self.opt.num_layer):
-                block = ConvBlock2D(self.N, self.N, self.opt.ker_size, self.opt.padd_size, stride=1)
-                _first_stage.append(block)
+                _first_stage.append(ConvBlock2D(self.N, self.N, self.opt.ker_size, self.opt.padd_size, stride=1))
             _first_stage.append(nn.Conv2d(self.N, self.opt.nc_im, self.opt.ker_size,
                                           stride=1, padding=self.opt.ker_size // 2,
-                                          weight_init=Normal(0.02, 0.0),
-                                          pad_mode='pad', has_bias=True))
-            self.body.append(_first_stage)
+                                          weight_init=Normal(0.02, 0.0), pad_mode='pad', has_bias=True))
+            self.body = nn.CellList([_first_stage])    # FIXME: Init BUG.
         else:
             self.body.append(self.body[-1])
 
@@ -363,36 +357,31 @@ class GeneratorVAE_nb(nn.Cell):
 
         vae_out = ops.Tanh()(self.decoder(z_vae_norm * z_vae_bern))
 
-        if sample_init is not None:
-            x_prev_out = self.refinement_layers(sample_init[0], sample_init[1], noise_amp, randMode)
-        else:
+        if sample_init is None:
             x_prev_out = self.refinement_layers(0, vae_out, noise_amp, randMode)
+        else:
+            x_prev_out = self.refinement_layers(sample_init[0], sample_init[1], noise_amp, randMode)
 
         if noise_init_norm is None:
             return x_prev_out, vae_out, mu, logvar, bern
         return x_prev_out, vae_out
 
-    def refinement_layers(self, start_idx, x_prev_out, noise_amp, randMode=False):
+    def refinement_layers(self, start_idx, x_prev_out, noise_amp, isRandom=False):
+        x_prev_out_up = 0
         for idx, block in enumerate(self.body[start_idx:], start_idx):
-            if self.vae_levels == idx + 1:
+            if self.vae_levels == idx + 1 and not self.train_all:
                 x_prev_out = ops.stop_gradient(x_prev_out)
-
             # Upscale
-            x_prev_out_up = utils.upscale_2d(x_prev_out, idx + 1,
-                                             self.scale_factor, self.stop_scale,
-                                             self.img_size, self.ar)
-
+            x_prev_out_up = utils.upscale_2d(x_prev_out, idx + 1, self.scale_factor, self.stop_scale, self.img_size, self.ar)
             # Whether add noise
-            if randMode:
+            if isRandom:
                 # Yes - in random mode
                 noise = utils.generate_noise_ref(x_prev_out_up.shape)
                 x_prev = block(x_prev_out_up + noise * noise_amp[idx + 1])
             else:
                 # No - in reconstruction mode
                 x_prev = block(x_prev_out_up)
-
             x_prev_out = ops.Tanh()(x_prev + x_prev_out_up)
-
         return x_prev_out
 
 

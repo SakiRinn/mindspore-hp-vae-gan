@@ -6,7 +6,7 @@ import mindspore.ops as ops
 from mindspore import Tensor
 from mindspore import dtype as mstype
 from mindspore.ops import constexpr
-from mindspore.common.initializer import Normal, Zero
+from mindspore.common.initializer import Normal
 from mindspore import context
 
 import sys
@@ -78,7 +78,7 @@ class FeatureExtractor(nn.SequentialCell):
     def __init__(self, in_channel, out_channel, ker_size, padding, stride,
                  num_blocks=2, return_linear=False):
         super(FeatureExtractor, self).__init__()
-        self.append(ConvBlock3DSN(in_channel, out_channel, ker_size, padding, stride)),
+        self.append(ConvBlock3DSN(in_channel, out_channel, ker_size, padding, stride))
         for _ in range(num_blocks - 1):
             self.append(ConvBlock3DSN(out_channel, out_channel, ker_size, padding, stride))
         if return_linear:
@@ -172,16 +172,17 @@ class WDiscriminator3D(nn.Cell):
     def __init__(self, opt):
         super(WDiscriminator3D, self).__init__()
 
-        self.opt = opt
         N = int(opt.nfc)
 
-        self.head = ConvBlock3DSN(opt.nc_im, N, opt.ker_size, opt.ker_size // 2, stride=1, bn=True, act='lrelu')
+        self.head = ConvBlock3DSN(opt.nc_im, N, opt.ker_size,
+                                  opt.ker_size // 2, stride=1, bn=True, act='lrelu')
 
-        body = []
-        for _ in range(opt.num_layer):
-            body.append(ConvBlock3DSN(N, N, opt.ker_size, opt.ker_size // 2,
-                                      stride=1, bn=True, act='lrelu'))
-        self.body = nn.SequentialCell(body)
+        # FIXME: Name BUG.
+        self.body = nn.SequentialCell([ConvBlock3DSN(N, N, opt.ker_size,
+                                                     opt.ker_size // 2, stride=1, bn=True, act='lrelu')])
+        for _ in range(opt.num_layer - 1):
+            self.body.append(ConvBlock3DSN(N, N, opt.ker_size,
+                                           opt.ker_size // 2, stride=1, bn=True, act='lrelu'))
 
         self.tail = nn.Conv3d(N, 1, kernel_size=opt.ker_size, padding=1, stride=1,
                               weight_init=Normal(0.02, 0.0), pad_mode='pad', has_bias=True)
@@ -197,19 +198,22 @@ class WDiscriminatorBaselines(nn.Cell):
     def __init__(self, opt):
         super(WDiscriminatorBaselines, self).__init__()
 
-        self.opt = opt
         N = int(opt.nfc)
         self.p3d = ((0, 0), (0, 0),
-                    (self.opt.num_layer + 2, self.opt.num_layer + 2),
-                    (self.opt.num_layer + 2, self.opt.num_layer + 2),
-                    (self.opt.num_layer + 2, self.opt.num_layer + 2))
+                    (opt.num_layer + 2, opt.num_layer + 2),
+                    (opt.num_layer + 2, opt.num_layer + 2),
+                    (opt.num_layer + 2, opt.num_layer + 2))
 
-        self.head = ConvBlock3D(opt.nc_im, N, opt.ker_size, opt.padd_size, stride=1, bn=False, act='lrelu')
+        self.head = ConvBlock3D(opt.nc_im, N, opt.ker_size,
+                                opt.padd_size, stride=1, bn=False, act='lrelu')
 
-        body = []
-        for _ in range(opt.num_layer):
-            body.append(ConvBlock3D(N, N, opt.ker_size, opt.padd_size, stride=1, bn=True, act='lrelu'))
-        self.body = nn.SequentialCell(body)
+        # FIXME: Name BUG.
+        self.body = nn.SequentialCell([ConvBlock3DSN(N, N, opt.ker_size,
+                                                     opt.ker_size // 2, stride=1, bn=True, act='lrelu')])
+        for _ in range(opt.num_layer - 1):
+            self.body.append(ConvBlock3DSN(N, N, opt.ker_size,
+                                           opt.ker_size // 2, stride=1, bn=True, act='lrelu'))
+
         self.tail = nn.Conv3d(N, 1, kernel_size=opt.ker_size, padding=opt.padd_size, stride=1,
                               weight_init=Normal(0.02, 0.0), pad_mode='pad', has_bias=True)
 
@@ -227,59 +231,60 @@ class GeneratorCSG(nn.Cell):
     def __init__(self, opt):
         super(GeneratorCSG, self).__init__()
 
-        self.opt = opt
+        self.num_layer = opt.num_layer
+        self.scale_factor = opt.scale_factor
+        self.stop_scale = opt.stop_scale
+        self.img_size = opt.img_size
+        self.stop_scale_time = opt.stop_scale_time
+        self.sampling_rates = opt.sampling_rates
+        self.org_fps = opt.org_fps
+        self.fps_lcm = opt.fps_lcm
+        self.ar = opt.ar
+
         N = int(opt.nfc)
 
         self.p3d_once = ((0, 0), (0, 0), (1, 1), (1, 1), (1, 1))
         self.p3d = ((0, 0), (0, 0),
-                    (self.opt.num_layer + 0, self.opt.num_layer + 0),
-                    (self.opt.num_layer + 0, self.opt.num_layer + 0),
-                    (self.opt.num_layer + 0, self.opt.num_layer + 0))
+                    (opt.num_layer + 0, opt.num_layer + 0),
+                    (opt.num_layer + 0, opt.num_layer + 0),
+                    (opt.num_layer + 0, opt.num_layer + 0))
 
         self.head = ConvBlock3D(opt.nc_im, N, opt.ker_size, padding=0, stride=1)
-
-        self.body = nn.CellList([])
-        _first_stage = nn.SequentialCell()
-        for _ in range(opt.num_layer):
-            block = ConvBlock3D(N, N, opt.ker_size, padding=0, stride=1)
-            _first_stage.append(block)
-        self.body.append(_first_stage)
-
-        tail = []
-        tail.append(nn.Conv3d(N, opt.nc_im, kernel_size=opt.ker_size, padding=0, stride=1,
-                              weight_init=Normal(0.02, 0.0), pad_mode='pad', has_bias=True))
-        tail.append(nn.Tanh())
-        self.tail = nn.SequentialCell(tail)
-
+        self.body = nn.CellList([ConvBlock3D(N, N, opt.ker_size, padding=0, stride=1)
+                                 for _ in range(opt.num_layer)])
+        self.tail = nn.SequentialCell([
+            nn.Conv3d(N, opt.nc_im, kernel_size=opt.ker_size, padding=0, stride=1,
+                      weight_init=Normal(0.02, 0.0), pad_mode='pad', has_bias=True),
+            nn.Tanh()
+        ])
 
     def init_next_stage(self):
         self.body.append(self.body[-1])
 
-    def construct(self, noise_init, noise_amp, mode='rand'):
-        pad_op1 = ops.Pad(self.p3d_once)
-        x = self.head(pad_op1(noise_init))
-
-        pad_op2 = ops.Pad(self.p3d)
-        x_prev_out = self.body[0](pad_op2(x))
+    def construct(self, noise_init, noise_amp, isRandom=False):
+        x = self.head(ops.Pad(self.p3d_once)(noise_init))
+        x_prev_out = self.body[0](ops.Pad(self.p3d)(x))
 
         for idx, block in enumerate(self.body[1:], 1):
             # Upscale
-            x_prev_out_up = utils.upscale(x_prev_out, idx, self.opt)
-
-            # Add noise if "random" sampling, else, add no noise is "reconstruction" mode
-            if mode == 'rand':
+            x_prev_out_up = utils.upscale(x_prev_out, idx, self.scale_factor, self.stop_scale, self.img_size,
+                                          self.stop_scale_time, self.sampling_rates, self.org_fps, self.fps_lcm, self.ar)
+            # Whether add noise
+            if isRandom:
+                # Yes - in random mode
                 x_prev_out_up_2 = utils.interpolate_3D(x_prev_out, size=[
-                    x_prev_out_up.shape[-3] + (self.opt.num_layer + 0) * 2,
-                    x_prev_out_up.shape[-2] + (self.opt.num_layer + 0) * 2,
-                    x_prev_out_up.shape[-1] + (self.opt.num_layer + 0) * 2
+                    x_prev_out_up.shape[-3] + (self.num_layer + 0) * 2,
+                    x_prev_out_up.shape[-2] + (self.num_layer + 0) * 2,
+                    x_prev_out_up.shape[-1] + (self.num_layer + 0) * 2
                 ])
                 noise = utils.generate_noise_ref(x_prev_out_up_2.shape)
                 x_prev = block(x_prev_out_up_2 + noise * noise_amp[idx])
             else:
-                x_prev = block(pad_op2(x_prev_out_up))
+                # No - in reconstruction mode
+                x_prev = block(ops.Pad(self.p3d)(x_prev_out_up))
             x_prev_out = x_prev + x_prev_out_up
 
-        out = self.tail(pad_op1(x_prev_out))
+        out = self.tail(ops.Pad(self.p3d_once)(x_prev_out))
         return out
 
 
@@ -287,7 +292,16 @@ class GeneratorSG(nn.Cell):
     def __init__(self, opt):
         super(GeneratorSG, self).__init__()
 
-        self.opt = opt
+        self.num_layer = opt.num_layer
+        self.scale_factor = opt.scale_factor
+        self.stop_scale = opt.stop_scale
+        self.img_size = opt.img_size
+        self.stop_scale_time = opt.stop_scale_time
+        self.sampling_rates = opt.sampling_rates
+        self.org_fps = opt.org_fps
+        self.fps_lcm = opt.fps_lcm
+        self.ar = opt.ar
+
         N = int(opt.nfc)
 
         self.p3d = ((0, 0), (0, 0),
@@ -295,22 +309,17 @@ class GeneratorSG(nn.Cell):
                     (self.opt.num_layer + 2, self.opt.num_layer + 2),
                     (self.opt.num_layer + 2, self.opt.num_layer + 2))
 
-        self.body = nn.CellList([])
-
-        _first_stage = nn.SequentialCell()
-        _first_stage.append(ConvBlock3D(opt.nc_im, N, opt.ker_size, padding=0, stride=1))
+        _first_stage = nn.SequentialCell([ConvBlock3D(opt.nc_im, N, opt.ker_size, padding=0, stride=1)])
         for _ in range(opt.num_layer):
-            block = ConvBlock3D(N, N, opt.ker_size, padding=0, stride=1)
-            _first_stage.append(block)
+            _first_stage.append(ConvBlock3D(N, N, opt.ker_size, padding=0, stride=1))
         _first_stage.append(nn.Conv3d(N, opt.nc_im, kernel_size=opt.ker_size,
                                       padding=0, stride=1, weight_init=Normal(0.02, 0.0)))
-        self.body.append(_first_stage)
-
+        self.body = nn.CellList([_first_stage])
 
     def init_next_stage(self):
         self.body.append(self.body[-1])
 
-    def construct(self, noise_init, noise_amp, mode='rand'):
+    def construct(self, noise_init, noise_amp, isRandom=False):
         pad_op = ops.Pad(self.p3d)
         x_prev_out = self.body[0](pad_op(noise_init))
 
@@ -318,10 +327,12 @@ class GeneratorSG(nn.Cell):
             x_prev_out = ops.Tanh()(x_prev_out)
 
             # Upscale
-            x_prev_out_up = utils.upscale(x_prev_out, idx, self.opt)
+            x_prev_out_up = utils.upscale(x_prev_out, idx, self.scale_factor, self.stop_scale, self.img_size,
+                                          self.stop_scale_time, self.sampling_rates, self.org_fps, self.fps_lcm, self.ar)
 
-            # Add noise if "random" sampling, else, add no noise is "reconstruction" mode
-            if mode == 'rand':
+            # Whether add noise
+            if isRandom:
+                # Yes - in random mode
                 x_prev_out_up_2 = utils.interpolate_3D(x_prev_out, size=[
                     x_prev_out_up.shape[-3] + (self.opt.num_layer + 2) * 2,
                     x_prev_out_up.shape[-2] + (self.opt.num_layer + 2) * 2,
@@ -330,10 +341,10 @@ class GeneratorSG(nn.Cell):
                 noise = utils.generate_noise_ref(x_prev_out_up_2.shape)
                 x_prev = block(x_prev_out_up_2 + noise * noise_amp[idx])
             else:
+                # No - in reconstruction mode
                 x_prev = block(pad_op(x_prev_out_up))
-            x_prev_out = x_prev + x_prev_out_up
 
-        out = ops.Tanh()(x_prev_out)
+        out = ops.Tanh()(x_prev + x_prev_out_up)
         return out
 
 
@@ -345,9 +356,12 @@ class GeneratorHPVAEGAN(nn.Cell):
         self.scale_factor = opt.scale_factor
         self.stop_scale = opt.stop_scale
         self.img_size = opt.img_size
+        self.stop_scale_time = opt.stop_scale_time
+        self.sampling_rates = opt.sampling_rates
+        self.org_fps = opt.org_fps
+        self.fps_lcm = opt.fps_lcm
         self.ar = opt.ar
         self.vae_levels = opt.vae_levels
-        self.train_all = opt.train_all
 
         N = int(opt.nfc)
         self.N = N
@@ -356,13 +370,12 @@ class GeneratorHPVAEGAN(nn.Cell):
         self.encode = Encode3DVAE(opt, out_dim=opt.latent_dim, num_blocks=opt.enc_blocks)
 
         # Normal Decoder
-        decoder = []
-        decoder.append(ConvBlock3D(opt.latent_dim, N, opt.ker_size, opt.padd_size, stride=1))
+        decoder = nn.SequentialCell([ConvBlock3D(opt.latent_dim, N, opt.ker_size, opt.padd_size, stride=1)])
         for _ in range(opt.num_layer):
             decoder.append(ConvBlock3D(N, N, opt.ker_size, opt.padd_size, stride=1))
         decoder.append(nn.Conv3d(N, opt.nc_im, opt.ker_size, stride=1, padding=opt.ker_size // 2,
                                  weight_init=Normal(0.02, 0.0), pad_mode='pad', has_bias=True))
-        self.decoder = nn.SequentialCell(decoder)
+        self.decoder = decoder
 
         # 1x1 Decoder
         # self.decoder.append(ConvBlock3D(opt.latent_dim, N, 1, 0, stride=1))
@@ -375,24 +388,23 @@ class GeneratorHPVAEGAN(nn.Cell):
 
     def init_next_stage(self):
         if len(self.body) == 0:
-            _first_stage = nn.SequentialCell()
-            _first_stage.append(ConvBlock3D(self.opt.nc_im, self.N,
-                                            self.opt.ker_size, self.opt.padd_size, stride=1))
+            _first_stage = nn.SequentialCell([ConvBlock3D(self.opt.nc_im, self.N, self.opt.ker_size,
+                                                          self.opt.padd_size, stride=1)])
             for _ in range(self.opt.num_layer):
-                block = ConvBlock3D(self.N, self.N, self.opt.ker_size, self.opt.padd_size, stride=1)
-                _first_stage.append(block)
+                _first_stage.append(ConvBlock3D(self.N, self.N, self.opt.ker_size, self.opt.padd_size, stride=1))
             _first_stage.append(nn.Conv3d(self.N, self.opt.nc_im, self.opt.ker_size,
                                           stride=1, padding=self.opt.ker_size // 2,
                                           weight_init=Normal(0.02, 0.0), pad_mode='pad', has_bias=True))
-            self.body.append(_first_stage)
+            self.body = nn.CellList([_first_stage])    # FIXME: Init BUG.
         else:
             self.body.append(self.body[-1])
 
-    def construct(self, video, noise_amp, noise_init=None, sample_init=None, randMode=False):
+    def construct(self, video, noise_amp, noise_init=None, sample_init=None, isRandom=False):
         if sample_init is not None:
             if len(self.body) <= sample_init[0]:
                 exit(1)
 
+        mu, logvar = None, None
         if noise_init is None:
             mu, logvar = self.encode(video)
             if self.is_training:
@@ -404,73 +416,78 @@ class GeneratorHPVAEGAN(nn.Cell):
         else:
             z_vae = noise_init
 
-        vae_out = ops.tanh(self.decoder(z_vae))
+        vae_out = ops.Tanh()(self.decoder(z_vae))
 
-        if sample_init is not None:
-            x_prev_out = self.refinement_layers(sample_init[0], sample_init[1], noise_amp, randMode)
+        if sample_init is None:
+            x_prev_out = self.refinement_layers(0, vae_out, noise_amp, isRandom)
         else:
-            x_prev_out = self.refinement_layers(0, vae_out, noise_amp, randMode)
+            x_prev_out = self.refinement_layers(sample_init[0], sample_init[1], noise_amp, isRandom)
 
         if noise_init is None:
-            return x_prev_out, vae_out, (mu, logvar)
-        else:
-            return x_prev_out, vae_out
+            return x_prev_out, vae_out, mu, logvar
+        return x_prev_out, vae_out
 
-    def refinement_layers(self, start_idx, x_prev_out, noise_amp, randMode=False):
+    def refinement_layers(self, start_idx, x_prev_out, noise_amp, isRandom=False):
+        x_prev_out_up = 0
         for idx, block in enumerate(self.body[start_idx:], start_idx):
-            if self.opt.vae_levels == idx + 1 and not self.opt.train_all:
+            if self.vae_levels == idx + 1 and not self.train_all:
                 x_prev_out = ops.stop_gradient(x_prev_out)
-
             # Upscale
-            x_prev_out_up = utils.upscale(x_prev_out, idx + 1, self.opt)
-
-            # Add noise if "random" sampling, else, add no noise is "reconstruction" mode
-            if randMode and self.opt.vae_levels <= idx + 1:
+            x_prev_out_up = utils.upscale(x_prev_out, idx + 1, self.scale_factor, self.stop_scale, self.img_size,
+                                          self.stop_scale_time, self.sampling_rates, self.org_fps, self.fps_lcm, self.ar)
+            # Whether add noise
+            if isRandom and self.opt.vae_levels <= idx + 1:
+                # Yes - in random mode
                 noise = utils.generate_noise_ref(x_prev_out_up.shape)
                 x_prev = block(x_prev_out_up + noise * noise_amp[idx + 1])
             else:
+                # No - in reconstruction mode
                 x_prev = block(x_prev_out_up)
-
             x_prev_out = ops.Tanh()(x_prev + x_prev_out_up)
-
         return x_prev_out
 
 
 class GeneratorVAE_nb(nn.Cell):
-    def __init__(self, opt):
+    def __init__(self, opt, is_training=False):
         super(GeneratorVAE_nb, self).__init__()
 
         self.opt = opt
+        self.scale_factor = opt.scale_factor
+        self.stop_scale = opt.stop_scale
+        self.img_size = opt.img_size
+        self.stop_scale_time = opt.stop_scale_time
+        self.sampling_rates = opt.sampling_rates
+        self.org_fps = opt.org_fps
+        self.fps_lcm = opt.fps_lcm
+        self.ar = opt.ar
+        self.vae_levels = opt.vae_levels
+
         N = int(opt.nfc)
         self.N = N
+        self.is_training = is_training
 
         self.encode = Encode3DVAE_nb(opt, out_dim=opt.latent_dim, num_blocks=opt.enc_blocks)
 
         # Normal Decoder
-        decoder = []
-        decoder.append(ConvBlock3D(opt.latent_dim, N, opt.ker_size, opt.padd_size, stride=1))
+        decoder = nn.SequentialCell([ConvBlock3D(opt.latent_dim, N, opt.ker_size, opt.padd_size, stride=1)])
         for _ in range(opt.num_layer):
-            block = ConvBlock3D(N, N, opt.ker_size, opt.padd_size, stride=1)
-            decoder.append(block)
+            decoder.append(ConvBlock3D(N, N, opt.ker_size, opt.padd_size, stride=1))
         decoder.append(nn.Conv3d(N, opt.nc_im, opt.ker_size, stride=1, padding=opt.ker_size // 2,
                                  weight_init=Normal(0.02, 0.0), pad_mode='pad', has_bias=True))
-        self.decoder = nn.SequentialCell(decoder)
+        self.decoder = decoder
 
         self.body = nn.CellList([])
 
     def init_next_stage(self):
         if len(self.body) == 0:
-            _first_stage = nn.SequentialCell()
-            _first_stage.append(ConvBlock3D(self.opt.nc_im, self.N,
-                                            self.opt.ker_size, self.opt.padd_size, stride=1))
+            _first_stage = nn.SequentialCell([ConvBlock3D(self.opt.nc_im, self.N, self.opt.ker_size,
+                                                          self.opt.padd_size, stride=1)])
             for _ in range(self.opt.num_layer):
-                block = ConvBlock3D(self.N, self.N,
-                                    self.opt.ker_size, self.opt.padd_size, stride=1)
-                _first_stage.append(block)
+                _first_stage.append(ConvBlock3D(self.N, self.N, self.opt.ker_size, self.opt.padd_size, stride=1))
             _first_stage.append(nn.Conv3d(self.N, self.opt.nc_im, self.opt.ker_size,
                                           stride=1, padding=self.opt.ker_size // 2,
                                           weight_init=Normal(0.02, 0.0), pad_mode='pad', has_bias=True))
-            self.body.append(_first_stage)
+            self.body = nn.CellList([_first_stage])    # FIXME: Init BUG.
         else:
             self.body.append(self.body[-1])
 
@@ -480,6 +497,7 @@ class GeneratorVAE_nb(nn.Cell):
             if len(self.body) <= sample_init[0]:
                 exit(1)
 
+        mu, logvar, bern = None, None, None
         if noise_init_norm is None:
             mu, logvar, bern = self.encode(video)
             if self.is_training:
@@ -500,38 +518,40 @@ class GeneratorVAE_nb(nn.Cell):
 
         vae_out = ops.Tanh()(self.decoder(z_vae_norm * z_vae_bern))
 
-        if sample_init is not None:
-            x_prev_out = self.refinement_layers(sample_init[0], sample_init[1], noise_amp, randMode)
-        else:
+        if sample_init is None:
             x_prev_out = self.refinement_layers(0, vae_out, noise_amp, randMode)
+        else:
+            x_prev_out = self.refinement_layers(sample_init[0], sample_init[1], noise_amp, randMode)
 
         if noise_init_norm is None:
-            return x_prev_out, vae_out, (mu, logvar, bern)
-        else:
-            return x_prev_out, vae_out
+            return x_prev_out, vae_out, mu, logvar, bern
+        return x_prev_out, vae_out
 
     def refinement_layers(self, start_idx, x_prev_out, noise_amp, randMode=False):
+        x_prev_out_up = 0
         for idx, block in enumerate(self.body[start_idx:], start_idx):
-            if self.opt.vae_levels == idx + 1:
+            if self.vae_levels == idx + 1 and not self.train_all:
                 x_prev_out = ops.stop_gradient(x_prev_out)
-
             # Upscale
-            x_prev_out_up = utils.upscale(x_prev_out, idx + 1, self.opt)
-
-            # Add noise if "random" sampling, else, add no noise is "reconstruction" mode
+            x_prev_out_up = utils.upscale(x_prev_out, idx + 1, self.scale_factor, self.stop_scale, self.img_size,
+                                          self.stop_scale_time, self.sampling_rates, self.org_fps, self.fps_lcm, self.ar)
+            # Whether add noise
             if randMode:
+                # Yes - in random mode
                 noise = utils.generate_noise_ref(x_prev_out_up.shape)
                 x_prev = block(x_prev_out_up + noise * noise_amp[idx + 1])
             else:
+                # No - in reconstruction mode
                 x_prev = block(x_prev_out_up)
-
             x_prev_out = ops.Tanh()(x_prev + x_prev_out_up)
-
         return x_prev_out
 
 
 if __name__ == '__main__':
-    context.set_context(device_target='Ascend', device_id=7, mode=context.PYNATIVE_MODE)
+    import cv2
+    import numpy as np
+
+    context.set_context(device_target='Ascend', device_id=7, mode=0)
 
     class Opt:
         def __init__(self):
@@ -552,19 +572,17 @@ if __name__ == '__main__':
             self.scale_idx = 0
             self.vae_levels = 3
             self.sampling_rates = [4, 3, 2, 1]
-            import cv2
-            import numpy as np
             capture = cv2.VideoCapture(self.video_path)
             self.org_fps = capture.get(cv2.CAP_PROP_FPS)
             self.fps_lcm = np.lcm.reduce(self.sampling_rates)
             self.Noise_Amps = [1, 1, 1]
+            self.ar = 1
+            self.train_all = True
 
     opt = Opt()
-    dataset = datasets.SingleImageDataset(opt)
-    sn = ConvBlock3DSN(opt.nc_im, int(opt.nfc), opt.ker_size, opt.ker_size // 2,
-                       stride=1, bn=True, act='lrelu')
-    model = GeneratorCSG(opt)
+    model = GeneratorHPVAEGAN(opt)
     model.init_next_stage()
     from mindspore.common.initializer import One
-    x = Tensor(shape=(64, 3, 3, 3, 3), init=One(), dtype=mstype.float32)
-    print(model(x, opt.Noise_Amps))
+    x = Tensor(shape=(8, 3, 2, 2, 2), init=One(), dtype=mstype.float32)
+    y = model(x, opt.Noise_Amps)
+    print(y[0].shape, y[1].shape, len(y))

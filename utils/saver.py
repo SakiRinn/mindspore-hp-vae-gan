@@ -22,7 +22,12 @@ class DataSaver:
     def __init__(self, opt, run_id=None):
         self.opt = opt
         if not hasattr(opt, 'experiment_dir') or not os.path.exists(opt.experiment_dir):
-            clip_name = '.'.join(opt.image_path.split('/')[-1].split('.')[:-1])
+            if hasattr(opt, 'image_path'):
+                clip_name = '.'.join(opt.image_path.split('/')[-1].split('.')[:-1])
+            elif hasattr(opt, 'video_path'):
+                clip_name = '.'.join(opt.video_path.split('/')[-1].split('.')[:-1])
+            else:
+                raise AttributeError
             self.directory = os.path.join('run', clip_name, opt.checkname)
             if run_id is None:
                 self.runs = sorted(glob.glob(os.path.join(self.directory, 'experiment_*')))
