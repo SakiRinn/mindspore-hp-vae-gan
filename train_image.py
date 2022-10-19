@@ -149,21 +149,19 @@ def train(opt, netG):
         ## Train
         if opt.vae_levels >= opt.scale_idx + 1:
             # (1) Update VAE network
-            curG_loss = G_train(real, real_zero, noise_init, opt.Noise_Amps, True)
+            curG_loss = G_train(real, real_zero, opt.scale_idx, noise_init, opt.Noise_Amps, True)
         else:
             # (2) Update distriminator: maximize D(x) + D(G(z))
             curD_loss = D_train(real, noise_init, opt.Noise_Amps)
             # (3) Update generator: maximize D(G(z)) (After grad clipping)
-            curG_loss = G_train(real, real_zero, noise_init, opt.Noise_Amps, False)
+            curG_loss = G_train(real, real_zero, opt.scale_idx , noise_init, opt.Noise_Amps, False)
         total_loss += curG_loss
 
 
         ## Verbose
         # Update progress bar
         epoch_iterator.set_description('Scale [{}/{}], Iteration [{}/{}]'.format(
-            opt.scale_idx + 1, opt.stop_scale + 1,
-            iteration + 1, opt.niter,
-        ))
+            opt.scale_idx + 1, opt.stop_scale + 1,iteration + 1, opt.niter))
 
         # Print
         if (iteration + 1) % opt.print_interval == 0:
@@ -354,19 +352,21 @@ if __name__ == '__main__':
     ## Current networks
     assert hasattr(networks_2d, opt.generator)
     netG = getattr(networks_2d, opt.generator)(opt)
+    print(opt.stop_scale)
+    for i in netG.trainable_params():
+        print(i)
 
     if opt.netG != '':
         # Init
+        opt.saver.experiment_dir = '/'.join(opt.netG.split('/')[:-1])
         opt.Noise_Amps = opt.saver.load_json('intermediate.json')['noise_amps']
-        opt.scale_idx = opt.saver.load_json('intermediate.json')['scale']
-        opt.resumed_idx = opt.saver.load_json('intermediate.json')['scale']
-        opt.resume_dir = '/'.join(opt.netG.split('/')[:-1])
+        opt.scale_idx = opt.saver.load_json('intermediate.json')['scale_idx']
         # Load
         if not os.path.isfile(opt.netG):
             raise RuntimeError(f"=> no <G> checkpoint found at '{opt.netG}'")
         checkpoint = mindspore.load_checkpoint(opt.netG)
-        for _ in range(opt.scale_idx):
-            netG.init_next_stage()
+        # for _ in range(opt.scale_idx):
+        #     netG.init_next_stage()
         mindspore.load_param_into_net(netG, checkpoint)
     else:
         opt.resumed_idx = -1
@@ -374,8 +374,8 @@ if __name__ == '__main__':
 
     ## Train
     while opt.scale_idx < opt.stop_scale + 1:
-        if (opt.scale_idx > 0) and (opt.resumed_idx != opt.scale_idx):
-            netG.init_next_stage()
+        # if (opt.scale_idx > 0) and (opt.resumed_idx != opt.scale_idx):
+        #     netG.init_next_stage()
         train(opt, netG)
 
         # Increase scale

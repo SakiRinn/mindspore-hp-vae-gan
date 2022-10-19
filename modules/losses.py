@@ -72,9 +72,9 @@ class GWithLoss(nn.Cell):
         self.kl_weight = opt.kl_weight
         self.disc_loss_weight = opt.disc_loss_weight
 
-    def construct(self, real, real_zero, noise_init, noise_amps, isVAE=False):
+    def construct(self, real, real_zero, scale_idx, noise_init, noise_amps, isVAE=False):
         # Forward
-        return_list = self.backbone_network(real_zero, noise_amps, isRandom=False)
+        return_list = self.backbone_network(real_zero, noise_amps, scale_idx, isRandom=False)
         generated = return_list[0]
         generated_vae = return_list[1]
         mu = return_list[2]
@@ -93,7 +93,7 @@ class GWithLoss(nn.Cell):
             errG_total = self.rec_weight * rec_loss
 
             # Fake
-            return_list = self.backbone_network(noise_init, noise_amps, noise_init=noise_init, isRandom=True)
+            return_list = self.backbone_network(noise_init, noise_amps, scale_idx, noise_init=noise_init, isRandom=True)
             fake = ops.stop_gradient(return_list[0])
 
             # Train with Discriminator

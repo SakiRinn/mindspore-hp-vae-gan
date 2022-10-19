@@ -1,6 +1,7 @@
 from __future__ import absolute_import, division, print_function
 import numpy as np
 
+import mindspore
 import mindspore.nn as nn
 import mindspore.ops as ops
 from mindspore.ops import constexpr
@@ -165,15 +166,14 @@ class WDiscriminator2D(nn.Cell):
 
         N = int(opt.nfc)
 
-        self.head = ConvBlock2DSN(opt.nc_im, N, opt.ker_size,
-                                  opt.ker_size // 2, stride=1, bn=True, act='lrelu')
+        self.head = ConvBlock2DSN(opt.nc_im, N, opt.ker_size, opt.ker_size // 2, stride=1, bn=True, act='lrelu')
 
-        # FIXME: Name BUG.
-        self.body = nn.SequentialCell([ConvBlock2DSN(N, N, opt.ker_size,
-                                       opt.ker_size // 2, stride=1, bn=True, act='lrelu')])
-        for _ in range(opt.num_layer - 1):
-            self.body.append(ConvBlock2DSN(N, N, opt.ker_size,
-                             opt.ker_size // 2, stride=1, bn=True, act='lrelu'))
+        block = ConvBlock2DSN(N, N, opt.ker_size, opt.ker_size // 2, stride=1, bn=True, act='lrelu')
+        self.body = nn.SequentialCell([block])
+        for _ in range(opt.num_layer):
+            block = ConvBlock2DSN(N, N, opt.ker_size, opt.ker_size // 2, stride=1, bn=True, act='lrelu')
+            self.body.append(block)
+        del self.body[0]
 
         self.tail = nn.Conv2d(N, 1, kernel_size=opt.ker_size, padding=1, stride=1,
                               weight_init=Normal(0.02, 0.0), pad_mode='pad', has_bias=True)
@@ -219,29 +219,28 @@ class GeneratorHPVAEGAN(nn.Cell):
         #     self.decoder.append(block)
         # self.decoder.append(nn.Conv2d(N, opt.nc_im, 1, 1, 0))
 
-        self.body = nn.CellList([])
-
-    def init_next_stage(self):
         _new_stage = nn.SequentialCell([ConvBlock2D(self.opt.nc_im, self.N, self.opt.ker_size,
-                                                      self.opt.padd_size, stride=1)])
+                                                    self.opt.padd_size, stride=1)])
         for _ in range(self.opt.num_layer):
             block = ConvBlock2D(self.N, self.N, self.opt.ker_size, self.opt.padd_size, stride=1)
             _new_stage.append(block)
         _new_stage.append(nn.Conv2d(self.N, self.opt.nc_im, self.opt.ker_size,
-                                      stride=1, padding=self.opt.ker_size // 2,
-                                      weight_init=Normal(0.02, 0.0), pad_mode='pad', has_bias=True))
-        if len(self.body) == 0:
-            self.body = nn.CellList([_new_stage])
-        else:
-            _last_stage = self.body[-1]
-            for old, new in zip(_last_stage.trainable_params(), _new_stage.trainable_params()):
-                if isinstance(new.data, Tensor):
-                    new.set_data(old.data)
+                                    stride=1, padding=self.opt.ker_size // 2,
+                                    weight_init=Normal(0.02, 0.0), pad_mode='pad', has_bias=True))
+        self.body = nn.SequentialCell([_new_stage])
+        for _ in range(self.stop_scale):
+            _new_stage = nn.SequentialCell([ConvBlock2D(self.opt.nc_im, self.N, self.opt.ker_size,
+                                                        self.opt.padd_size, stride=1)])
+            for _ in range(self.opt.num_layer):
+                block = ConvBlock2D(self.N, self.N, self.opt.ker_size, self.opt.padd_size, stride=1)
+                _new_stage.append(block)
+            _new_stage.append(nn.Conv2d(self.N, self.opt.nc_im, self.opt.ker_size,
+                                        stride=1, padding=self.opt.ker_size // 2,
+                                        weight_init=Normal(0.02, 0.0), pad_mode='pad', has_bias=True))
             self.body.append(_new_stage)
+        del self.body[0]
 
-
-
-    def construct(self, video, noise_amp, noise_init=None, sample_init=None, isRandom=False):
+    def construct(self, video, noise_amp, scale_idx, noise_init=None, sample_init=None, isRandom=False):
         if sample_init is not None:
             if len(self.body) <= sample_init[0]:
                 exit(1)
@@ -262,17 +261,19 @@ class GeneratorHPVAEGAN(nn.Cell):
 
         # (N, C, 19, 26)
         if sample_init is None:
-            x_prev_out = self.refinement_layers(0, vae_out, noise_amp, isRandom)
+            x_prev_out = self.refinement_layers(0, scale_idx, vae_out, noise_amp, isRandom)
         else:
-            x_prev_out = self.refinement_layers(sample_init[0], sample_init[1], noise_amp, isRandom)
+            x_prev_out = self.refinement_layers(sample_init[0], scale_idx, sample_init[1], noise_amp, isRandom)
 
         if noise_init is None:
             return x_prev_out, vae_out, mu, logvar
         return x_prev_out, vae_out
 
-    def refinement_layers(self, start_idx, x_prev_out, noise_amp, isRandom=False):
+    def refinement_layers(self, start_idx, end_idx, x_prev_out, noise_amp, isRandom=False):
         x_prev_out_up = 0
-        for idx, block in enumerate(self.body[start_idx:], start_idx):
+        print(start_idx, end_idx)
+        for idx, block in enumerate(self.body[start_idx:end_idx], start_idx):
+            print(idx, len(block.trainable_params()))
             if self.vae_levels == idx + 1 and not self.train_all:
                 x_prev_out = ops.stop_gradient(x_prev_out)
             # Upscale
