@@ -25,6 +25,7 @@ def train(opt, netG):
     # profiler = mindspore.Profiler()
 
     ## Current Networks
+    assert hasattr(networks_2d, opt.discriminator)
     D_curr = getattr(networks_2d, opt.discriminator)(opt)
     G_curr = netG
 
@@ -138,7 +139,7 @@ def train(opt, netG):
                     opt.Noise_Amps.append(opt.noise_amp)
                 else:
                     opt.Noise_Amps.append(0)
-                    return_list = G_curr(real_zero, opt.Noise_Amps, isRandom=False)
+                    return_list = G_curr(real_zero, opt.Noise_Amps, opt.scale_idx, isRandom=False)
                     z_reconstruction = return_list[0]
                     RMSE = nn.RMSELoss()(real, z_reconstruction)
 
@@ -208,7 +209,7 @@ def train(opt, netG):
 
 
 if __name__ == '__main__':
-    context.set_context(mode=0, device_id=1)
+    context.set_context(mode=1, device_id=5)
 
     ## Parser
     parser = argparse.ArgumentParser()
@@ -352,15 +353,13 @@ if __name__ == '__main__':
     ## Current networks
     assert hasattr(networks_2d, opt.generator)
     netG = getattr(networks_2d, opt.generator)(opt)
-    print(opt.stop_scale)
-    for i in netG.trainable_params():
-        print(i)
 
     if opt.netG != '':
         # Init
         opt.saver.experiment_dir = '/'.join(opt.netG.split('/')[:-1])
         opt.Noise_Amps = opt.saver.load_json('intermediate.json')['noise_amps']
         opt.scale_idx = opt.saver.load_json('intermediate.json')['scale_idx']
+        opt.resumed_idx = opt.scale_idx
         # Load
         if not os.path.isfile(opt.netG):
             raise RuntimeError(f"=> no <G> checkpoint found at '{opt.netG}'")
@@ -375,7 +374,12 @@ if __name__ == '__main__':
     ## Train
     while opt.scale_idx < opt.stop_scale + 1:
         # if (opt.scale_idx > 0) and (opt.resumed_idx != opt.scale_idx):
-        #     netG.init_next_stage()
+            # netG.init_next_stage()
+        if (opt.scale_idx > 1) and (opt.scale_idx > opt.resumed_idx):
+            for new, old in zip(netG.body[opt.scale_idx - 1].parameters_dict().keys(),
+                                netG.body[opt.scale_idx - 2].parameters_dict().keys()):
+                ops.assign(netG.body[opt.scale_idx - 1].parameters_dict()[new],
+                           netG.body[opt.scale_idx - 2].parameters_dict()[old])    # assign前后不改变名字
         train(opt, netG)
 
         # Increase scale

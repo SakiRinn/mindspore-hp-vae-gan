@@ -26,12 +26,13 @@ class DWithLoss(nn.Cell):
         self._netD = netD
         self._netG = netG
 
+        self.scale_idx = opt.scale_idx
         self.lambda_grad = opt.lambda_grad
         self.alpha = Tensor(shape=(1, 1), init=Normal(), dtype=mstype.float32)
 
     def construct(self, real, noise_init, noise_amps):
         # Fake
-        return_list = self._netG(noise_init, noise_amps, noise_init=noise_init, isRandom=True)
+        return_list = self._netG(noise_init, noise_amps, self.scale_idx, noise_init=noise_init, isRandom=True)
         fake = ops.stop_gradient(return_list[0])
 
         # Train with real
@@ -93,8 +94,8 @@ class GWithLoss(nn.Cell):
             errG_total = self.rec_weight * rec_loss
 
             # Fake
-            return_list = self.backbone_network(noise_init, noise_amps, scale_idx, noise_init=noise_init, isRandom=True)
-            fake = ops.stop_gradient(return_list[0])
+            return_list2 = self.backbone_network(noise_init, noise_amps, scale_idx, noise_init=noise_init, isRandom=True)
+            fake = ops.stop_gradient(return_list2[0])
 
             # Train with Discriminator
             output = self._netD(fake)

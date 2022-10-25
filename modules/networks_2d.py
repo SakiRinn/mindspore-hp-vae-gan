@@ -1,7 +1,7 @@
 from __future__ import absolute_import, division, print_function
 import numpy as np
+from collections import OrderedDict
 
-import mindspore
 import mindspore.nn as nn
 import mindspore.ops as ops
 from mindspore.ops import constexpr
@@ -93,17 +93,17 @@ class Encode2DVAE(nn.Cell):
             assert type(out_dim) is int
             output_dim = out_dim
 
-        self._features = FeatureExtractor(opt.nc_im, opt.nfc, opt.ker_size,
+        self.features = FeatureExtractor(opt.nc_im, opt.nfc, opt.ker_size,
                                          opt.ker_size // 2, 1, num_blocks=num_blocks)
-        self._mu = ConvBlock2D(opt.nfc, output_dim, opt.ker_size,
+        self.mu = ConvBlock2D(opt.nfc, output_dim, opt.ker_size,
                               opt.ker_size // 2, 1, bn=False, act=None)
-        self._logvar = ConvBlock2D(opt.nfc, output_dim, opt.ker_size,
+        self.logvar = ConvBlock2D(opt.nfc, output_dim, opt.ker_size,
                                   opt.ker_size // 2, 1, bn=False, act=None)
 
     def construct(self, x):
-        features = self._features(x)
-        mu = self._mu(features)
-        logvar = self._logvar(features)
+        features = self.features(x)
+        mu = self.mu(features)
+        logvar = self.logvar(features)
 
         return mu, logvar
 
@@ -118,22 +118,22 @@ class Encode2DVAE_nb(nn.Cell):
             assert type(out_dim) is int
             output_dim = out_dim
 
-        self._features = FeatureExtractor(opt.nc_im, opt.nfc, opt.ker_size,
+        self.features = FeatureExtractor(opt.nc_im, opt.nfc, opt.ker_size,
                                          opt.ker_size // 2, 1, num_blocks=num_blocks)
-        self._mu = ConvBlock2D(opt.nfc, output_dim, opt.ker_size,
+        self.mu = ConvBlock2D(opt.nfc, output_dim, opt.ker_size,
                               opt.ker_size // 2, 1, bn=False, act=None)
-        self._logvar = ConvBlock2D(opt.nfc, output_dim, opt.ker_size,
+        self.logvar = ConvBlock2D(opt.nfc, output_dim, opt.ker_size,
                                   opt.ker_size // 2, 1, bn=False, act=None)
         self.bern = ConvBlock2D(opt.nfc, 1, opt.ker_size, opt.ker_size // 2, 1, bn=False, act=None)
 
     def construct(self, x):
         reduce_mean = ops.ReduceMean(keep_dims=True)
 
-        features = self._features(x)
+        features = self.features(x)
         bern = ops.Sigmoid()(self.bern(features))
         features = bern * features
-        mu = reduce_mean(self._mu(features), (-2, -1))
-        logvar = reduce_mean(self._logvar(features), (-2, -1))
+        mu = reduce_mean(self.mu(features), (-2, -1))
+        logvar = reduce_mean(self.logvar(features), (-2, -1))
 
         return mu, logvar, bern
 
@@ -148,14 +148,14 @@ class Encode3DVAE1x1(nn.Cell):
             assert type(out_dim) is int
             output_dim = out_dim
 
-        self._features = FeatureExtractor(opt.nc_im, opt.nfc, 1, 0, 1, num_blocks=2)
-        self._mu = ConvBlock2D(opt.nfc, output_dim, 1, 0, 1, bn=False, act=None)
-        self._logvar = ConvBlock2D(opt.nfc, output_dim, 1, 0, 1, bn=False, act=None)
+        self.features = FeatureExtractor(opt.nc_im, opt.nfc, 1, 0, 1, num_blocks=2)
+        self.mu = ConvBlock2D(opt.nfc, output_dim, 1, 0, 1, bn=False, act=None)
+        self.logvar = ConvBlock2D(opt.nfc, output_dim, 1, 0, 1, bn=False, act=None)
 
     def construct(self, x):
-        features = self._features(x)
-        mu = self._mu(features)
-        logvar = self._logvar(features)
+        features = self.features(x)
+        mu = self.mu(features)
+        logvar = self.logvar(features)
 
         return mu, logvar
 
@@ -169,11 +169,11 @@ class WDiscriminator2D(nn.Cell):
         self.head = ConvBlock2DSN(opt.nc_im, N, opt.ker_size, opt.ker_size // 2, stride=1, bn=True, act='lrelu')
 
         block = ConvBlock2DSN(N, N, opt.ker_size, opt.ker_size // 2, stride=1, bn=True, act='lrelu')
-        self.body = nn.SequentialCell([block])
+        # self.body = nn.SequentialCell([block])    # XXX: Name BUG.
+        self.body = nn.SequentialCell([])
         for _ in range(opt.num_layer):
             block = ConvBlock2DSN(N, N, opt.ker_size, opt.ker_size // 2, stride=1, bn=True, act='lrelu')
             self.body.append(block)
-        del self.body[0]
 
         self.tail = nn.Conv2d(N, 1, kernel_size=opt.ker_size, padding=1, stride=1,
                               weight_init=Normal(0.02, 0.0), pad_mode='pad', has_bias=True)
@@ -204,13 +204,13 @@ class GeneratorHPVAEGAN(nn.Cell):
         self.encode = Encode2DVAE(opt, out_dim=opt.latent_dim, num_blocks=opt.enc_blocks)
 
         # Normal Decoder
-        decoder = nn.SequentialCell([ConvBlock2D(opt.latent_dim, N, opt.ker_size, opt.padd_size, stride=1)])
-        for _ in range(opt.num_layer):
-            decoder.append(ConvBlock2D(N, N, opt.ker_size, opt.padd_size, stride=1))
-        decoder.append(nn.Conv2d(N, opt.nc_im, opt.ker_size, stride=1,
-                                 padding=opt.ker_size // 2, weight_init=Normal(0.02, 0.0),
-                                 pad_mode='pad', has_bias=True))
-        self.decoder = decoder
+        decoder = OrderedDict(head=ConvBlock2D(opt.latent_dim, N, opt.ker_size, opt.padd_size, stride=1))
+        for i in range(opt.num_layer):
+            decoder[f'block{i+1}'] = ConvBlock2D(N, N, opt.ker_size, opt.padd_size, stride=1)
+        decoder['tail'] = nn.Conv2d(N, opt.nc_im, opt.ker_size, stride=1,
+                                    padding=opt.ker_size // 2, weight_init=Normal(0.02, 0.0),
+                                    pad_mode='pad', has_bias=True)
+        self.decoder = nn.SequentialCell(decoder)
 
         # 1x1 Decoder
         # self.decoder.append(ConvBlock2D(opt.latent_dim, N, 1, 0, stride=1))
@@ -219,26 +219,27 @@ class GeneratorHPVAEGAN(nn.Cell):
         #     self.decoder.append(block)
         # self.decoder.append(nn.Conv2d(N, opt.nc_im, 1, 1, 0))
 
-        _new_stage = nn.SequentialCell([ConvBlock2D(self.opt.nc_im, self.N, self.opt.ker_size,
-                                                    self.opt.padd_size, stride=1)])
-        for _ in range(self.opt.num_layer):
-            block = ConvBlock2D(self.N, self.N, self.opt.ker_size, self.opt.padd_size, stride=1)
-            _new_stage.append(block)
-        _new_stage.append(nn.Conv2d(self.N, self.opt.nc_im, self.opt.ker_size,
-                                    stride=1, padding=self.opt.ker_size // 2,
-                                    weight_init=Normal(0.02, 0.0), pad_mode='pad', has_bias=True))
-        self.body = nn.SequentialCell([_new_stage])
+        # stage = OrderedDict(head=ConvBlock2D(self.opt.nc_im, self.N, self.opt.ker_size,
+        #                                      self.opt.padd_size, stride=1))
+        # for i in range(self.opt.num_layer):
+        #     stage[f'block{i}'] = ConvBlock2D(self.N, self.N, self.opt.ker_size, self.opt.padd_size, stride=1)
+        # stage['tail'] = nn.Conv2d(self.N, self.opt.nc_im, self.opt.ker_size,
+        #                           stride=1, padding=self.opt.ker_size // 2,
+        #                           weight_init=Normal(0.02, 0.0), pad_mode='pad', has_bias=True)
+        # stage = nn.SequentialCell(stage)    # XXX: Name BUG.
+
+        self.body = nn.CellList([])
         for _ in range(self.stop_scale):
-            _new_stage = nn.SequentialCell([ConvBlock2D(self.opt.nc_im, self.N, self.opt.ker_size,
-                                                        self.opt.padd_size, stride=1)])
-            for _ in range(self.opt.num_layer):
+            stage = OrderedDict(head=ConvBlock2D(self.opt.nc_im, self.N, self.opt.ker_size,
+                                                 self.opt.padd_size, stride=1))
+            for i in range(self.opt.num_layer):
                 block = ConvBlock2D(self.N, self.N, self.opt.ker_size, self.opt.padd_size, stride=1)
-                _new_stage.append(block)
-            _new_stage.append(nn.Conv2d(self.N, self.opt.nc_im, self.opt.ker_size,
-                                        stride=1, padding=self.opt.ker_size // 2,
-                                        weight_init=Normal(0.02, 0.0), pad_mode='pad', has_bias=True))
-            self.body.append(_new_stage)
-        del self.body[0]
+                stage[f'block{i}'] = block
+            stage['tail'] = nn.Conv2d(self.N, self.opt.nc_im, self.opt.ker_size,
+                                     stride=1, padding=self.opt.ker_size // 2,
+                                     weight_init=Normal(0.02, 0.0), pad_mode='pad', has_bias=True)
+            stage = nn.SequentialCell(stage)
+            self.body.append(stage)
 
     def construct(self, video, noise_amp, scale_idx, noise_init=None, sample_init=None, isRandom=False):
         if sample_init is not None:
@@ -271,9 +272,7 @@ class GeneratorHPVAEGAN(nn.Cell):
 
     def refinement_layers(self, start_idx, end_idx, x_prev_out, noise_amp, isRandom=False):
         x_prev_out_up = 0
-        print(start_idx, end_idx)
         for idx, block in enumerate(self.body[start_idx:end_idx], start_idx):
-            print(idx, len(block.trainable_params()))
             if self.vae_levels == idx + 1 and not self.train_all:
                 x_prev_out = ops.stop_gradient(x_prev_out)
             # Upscale
@@ -327,7 +326,7 @@ class GeneratorVAE_nb(nn.Cell):
             _first_stage.append(nn.Conv2d(self.N, self.opt.nc_im, self.opt.ker_size,
                                           stride=1, padding=self.opt.ker_size // 2,
                                           weight_init=Normal(0.02, 0.0), pad_mode='pad', has_bias=True))
-            self.body = nn.CellList([_first_stage])    # FIXME: Init BUG.
+            self.body = nn.CellList([_first_stage])
         else:
             self.body.append(self.body[-1])
 
