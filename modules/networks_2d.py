@@ -1,5 +1,6 @@
 from __future__ import absolute_import, division, print_function
 import numpy as np
+import copy
 
 import mindspore.nn as nn
 import mindspore.ops as ops
@@ -232,7 +233,7 @@ class GeneratorHPVAEGAN(nn.Cell):
                                           weight_init=Normal(0.02, 0.0), pad_mode='pad', has_bias=True))
             self.body = nn.CellList([_first_stage])    # FIXME: Init BUG.
         else:
-            self.body.append(self.body[-1])
+            self.body.append(copy.deepcopy(self.body[-1]))
 
     def construct(self, video, noise_amp, noise_init=None, sample_init=None, isRandom=False):
         if sample_init is not None:
