@@ -80,25 +80,25 @@ def train(opt, netG):
                  "lr": opt.lr_g * (opt.lr_scale ** (len(netG.body[-train_depth:]) - 1 - idx))}
                 for idx, block in enumerate(netG.body[-train_depth:])]
         else:
-            parameter_list += [{"params": netG.encode.get_parameters(),
+            parameter_list += [{"params": netG.encode.trainable_params(),
                                 "lr": opt.lr_g * (opt.lr_scale ** opt.scale_idx)},
-                               {"params": netG.decoder.get_parameters(),
+                               {"params": netG.decoder.trainable_params(),
                                 "lr": opt.lr_g * (opt.lr_scale ** opt.scale_idx)}]
-            parameter_list += [{"params": block.get_parameters(),
+            parameter_list += [{"params": block.trainable_params(),
                                 "lr": opt.lr_g * (opt.lr_scale ** (len(netG.body[-opt.train_depth:]) - 1 - idx))}
                                for idx, block in enumerate(netG.body[-opt.train_depth:])]
     else:
         # (2) train all
         if len(netG.body) < opt.train_depth:
-            parameter_list += [{"params": netG.encode.get_parameters(),
+            parameter_list += [{"params": netG.encode.trainable_params(),
                                 "lr": opt.lr_g * (opt.lr_scale ** opt.scale_idx)},
-                               {"params": netG.decoder.get_parameters(),
+                               {"params": netG.decoder.trainable_params(),
                                 "lr": opt.lr_g * (opt.lr_scale ** opt.scale_idx)}]
-            parameter_list += [{"params": block.get_parameters(),
+            parameter_list += [{"params": block.trainable_params(),
                                 "lr": opt.lr_g * (opt.lr_scale ** (len(netG.body) - 1 - idx))}
                                for idx, block in enumerate(netG.body)]
         else:
-            parameter_list += [{"params": block.get_parameters(),
+            parameter_list += [{"params": block.trainable_params(),
                                 "lr": opt.lr_g * (opt.lr_scale ** (len(netG.body[-opt.train_depth:]) - 1 - idx))}
                                for idx, block in enumerate(netG.body[-opt.train_depth:])]
 
