@@ -1,10 +1,7 @@
-from .networks_2d import GeneratorHPVAEGAN, WDiscriminator2D
-
 import mindspore.nn as nn
 import mindspore.ops as ops
 from mindspore import Tensor, Parameter
 from mindspore import dtype as mstype
-from mindspore.common.initializer import Normal, One
 
 
 def kl_criterion(mu, logvar):
@@ -27,7 +24,7 @@ class DWithLoss(nn.Cell):
         self._netG = netG
 
         self.lambda_grad = opt.lambda_grad
-        self.alpha = Tensor(shape=(1, 1), init=Normal(), dtype=mstype.float32)
+        self.alpha = ops.UniformReal()((1, 1))
 
     def construct(self, real, noise_init, noise_amps):
         # Fake
@@ -51,7 +48,7 @@ class DWithLoss(nn.Cell):
 
     def calc_gradient_penalty(self, real, fake, LAMBDA=1):
         alpha = ops.BroadcastTo(real.shape)(self.alpha)
-        interpolates = (alpha * real + ((1 - alpha) * fake))
+        interpolates = alpha * real + ((1 - alpha) * fake)
         gradients = ops.GradOperation()(self.backbone_network)(interpolates)
         gradient_penalty = ((ops.LpNorm(1, 2)(gradients) - 1) ** 2).mean() * LAMBDA
         return gradient_penalty
@@ -109,6 +106,8 @@ class GWithLoss(nn.Cell):
 
 
 if __name__ == '__main__':
+    from mindspore import context
+    context.set_context(mode=0, device_id=5)
     class Opt:
         def __init__(self):
             self.nfc = 64
@@ -126,20 +125,9 @@ if __name__ == '__main__':
             self.scale_idx = 0
             self.vae_levels = 3
             self.Noise_Amps = [1]
-            self.rec_loss = nn.RMSELoss()
+            self.rec_loss = nn.MSELoss()
             self.rec_weight = 10.0
 
     opt = Opt()
-    netD = WDiscriminator2D(opt)
-    netG = GeneratorHPVAEGAN(opt)
-    Gloss = GWithLoss(opt, netD, netG)
-
-    normal = ops.StandardNormal()
-    real_zero = normal((1, 3, 24, 33))
-    real = normal((1, 3, 24, 33))
-    noise_init = normal((2, 128, 24, 33))
-
-    generated, generated_vae, (mu, logvar) = netG(real_zero, opt.Noise_Amps, randMode=False)
-    fake, _ = netG(noise_init, opt.Noise_Amps, noise_init=noise_init, randMode=True)
-    result = Gloss(real, real_zero, fake, generated, generated_vae, mu, logvar)
-    print(result)
+    print(ops.UniformReal()((1, 1))
+)

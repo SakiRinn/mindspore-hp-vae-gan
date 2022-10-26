@@ -363,7 +363,7 @@ class GeneratorVAE_nb(nn.Cell):
     def refinement_layers(self, start_idx, x_prev_out, noise_amp, isRandom=False):
         x_prev_out_up = 0
         for idx, block in enumerate(self.body[start_idx:], start_idx):
-            if self.vae_levels == idx + 1 and not self.train_all:
+            if self.vae_levels == idx + 1:
                 x_prev_out = ops.stop_gradient(x_prev_out)
             # Upscale
             x_prev_out_up = utils.upscale_2d(x_prev_out, idx + 1, self.scale_factor, self.stop_scale, self.img_size, self.ar)

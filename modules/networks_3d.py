@@ -1,5 +1,6 @@
 from __future__ import absolute_import, division, print_function
 import numpy as np
+import copy
 
 import mindspore.nn as nn
 import mindspore.ops as ops
@@ -178,9 +179,8 @@ class WDiscriminator3D(nn.Cell):
                                   opt.ker_size // 2, stride=1, bn=True, act='lrelu')
 
         # FIXME: Name BUG.
-        self.body = nn.SequentialCell([ConvBlock3DSN(N, N, opt.ker_size,
-                                                     opt.ker_size // 2, stride=1, bn=True, act='lrelu')])
-        for _ in range(opt.num_layer - 1):
+        self.body = nn.SequentialCell([])
+        for _ in range(opt.num_layer):
             self.body.append(ConvBlock3DSN(N, N, opt.ker_size,
                                            opt.ker_size // 2, stride=1, bn=True, act='lrelu'))
 
@@ -207,10 +207,8 @@ class WDiscriminatorBaselines(nn.Cell):
         self.head = ConvBlock3D(opt.nc_im, N, opt.ker_size,
                                 opt.padd_size, stride=1, bn=False, act='lrelu')
 
-        # FIXME: Name BUG.
-        self.body = nn.SequentialCell([ConvBlock3DSN(N, N, opt.ker_size,
-                                                     opt.ker_size // 2, stride=1, bn=True, act='lrelu')])
-        for _ in range(opt.num_layer - 1):
+        self.body = nn.SequentialCell([])
+        for _ in range(opt.num_layer):
             self.body.append(ConvBlock3DSN(N, N, opt.ker_size,
                                            opt.ker_size // 2, stride=1, bn=True, act='lrelu'))
 
@@ -259,7 +257,7 @@ class GeneratorCSG(nn.Cell):
         ])
 
     def init_next_stage(self):
-        self.body.append(self.body[-1])
+        self.body.append(copy.deepcopy(self.body[-1]))
 
     def construct(self, noise_init, noise_amp, isRandom=False):
         x = self.head(ops.Pad(self.p3d_once)(noise_init))
@@ -317,7 +315,7 @@ class GeneratorSG(nn.Cell):
         self.body = nn.CellList([_first_stage])
 
     def init_next_stage(self):
-        self.body.append(self.body[-1])
+        self.body.append(copy.deepcopy(self.body[-1]))
 
     def construct(self, noise_init, noise_amp, isRandom=False):
         pad_op = ops.Pad(self.p3d)
@@ -397,7 +395,7 @@ class GeneratorHPVAEGAN(nn.Cell):
                                           weight_init=Normal(0.02, 0.0), pad_mode='pad', has_bias=True))
             self.body = nn.CellList([_first_stage])    # FIXME: Init BUG.
         else:
-            self.body.append(self.body[-1])
+            self.body.append(copy.deepcopy(self.body[-1]))
 
     def construct(self, video, noise_amp, noise_init=None, sample_init=None, isRandom=False):
         if sample_init is not None:
@@ -489,7 +487,7 @@ class GeneratorVAE_nb(nn.Cell):
                                           weight_init=Normal(0.02, 0.0), pad_mode='pad', has_bias=True))
             self.body = nn.CellList([_first_stage])    # FIXME: Init BUG.
         else:
-            self.body.append(self.body[-1])
+            self.body.append(copy.deepcopy(self.body[-1]))
 
     def construct(self, video, noise_amp,
                   noise_init_norm=None, noise_init_bern=None, sample_init=None, randMode=False):
@@ -530,7 +528,7 @@ class GeneratorVAE_nb(nn.Cell):
     def refinement_layers(self, start_idx, x_prev_out, noise_amp, randMode=False):
         x_prev_out_up = 0
         for idx, block in enumerate(self.body[start_idx:], start_idx):
-            if self.vae_levels == idx + 1 and not self.train_all:
+            if self.vae_levels == idx + 1:
                 x_prev_out = ops.stop_gradient(x_prev_out)
             # Upscale
             x_prev_out_up = utils.upscale(x_prev_out, idx + 1, self.scale_factor, self.stop_scale, self.img_size,
