@@ -76,7 +76,7 @@ def train(opt, netG):
         if opt.vae_levels < opt.scale_idx + 1:
             train_depth = min(opt.train_depth, len(netG.body) - opt.vae_levels + 1)
             parameter_list += [
-                {"params": block.get_parameters(),
+                {"params": block.trainable_params(),
                  "lr": opt.lr_g * (opt.lr_scale ** (len(netG.body[-train_depth:]) - 1 - idx))}
                 for idx, block in enumerate(netG.body[-train_depth:])]
         else:
