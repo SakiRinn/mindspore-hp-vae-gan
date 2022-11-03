@@ -76,7 +76,7 @@ def configure_logging(filename=None):
 
     # create logger
     root_logger = logging.getLogger("")
-    root_logger.setLevel(logging.DEBUG)
+    root_logger.setLevel(logging.INFO)
 
     # create console handler and set level to debug
     console = logging.StreamHandler()
@@ -108,7 +108,7 @@ def configure_logging(filename=None):
         # Configure handler that removes color codes from logbook
         # --------------------------------------------------------------------------------------
         logbook = logging.FileHandler(filename=filename, mode="a", encoding="utf-8")
-        logbook.setLevel(logging.DEBUG)
+        logbook.setLevel(logging.INFO)
         fmt = get_default_logging_format(colorize=False, brackets=True)
         logbook_formatter = LogbookFormatter(fmt=fmt, datefmt=datefmt)
         logbook.setFormatter(logbook_formatter)

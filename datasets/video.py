@@ -6,10 +6,10 @@ import mindspore.dataset as ds
 import numpy as np
 from mindspore.dataset.vision.c_transforms import Normalize
 
+import sys
+sys.path.insert(0, '.')
 import utils
-from . import video_to_frames
-
-normalize = Normalize(mean=[0.5], std=[0.5])
+from datasets.generate_frames import video_to_frames
 
 
 class SingleVideoDataset:
@@ -69,7 +69,7 @@ class SingleVideoDataset:
             frames_zero_scale = frames_zero_scale / 255
             frames_zero_scale_transformed = self._get_transformed_frames(frames_zero_scale, hflip)
 
-            return [frames_transformed, frames_zero_scale_transformed]
+            return frames_transformed, frames_zero_scale_transformed
 
         return frames_transformed, np.zeros_like(frames_transformed)
 
@@ -81,7 +81,7 @@ class SingleVideoDataset:
             frames_transformed = np.flip(frames_transformed, -1)
         # Normalize
         for T in range(frames_transformed.shape[0]):
-            frames_transformed[T] = normalize(frames_transformed[T])
+            frames_transformed[T] = Normalize(mean=[0.5], std=[0.5])(frames_transformed[T])
         # Permute CTHW
         frames_transformed = frames_transformed.transpose(1, 0, 2, 3)
 
@@ -109,7 +109,7 @@ if __name__ == '__main__':
             self.enc_blocks = 2
             self.padd_size = 1
             self.image_path = '../data/imgs/air_balloons.jpg'
-            self.video_path = '../data/vids/air_balloons.mp4'
+            self.video_path = './data/vids/air_balloons.mp4'
             self.hflip = True
             self.img_size = 256
             self.scale_factor = 0.75
@@ -119,9 +119,10 @@ if __name__ == '__main__':
             self.sampling_rates = [4, 3, 2, 1]
             self.start_frame = 0
             self.max_frames = 13
+            self.org_fps = 24.0
 
         def get_fps_index(self):
-            fps, td, fps_index = utils.get_fps_td_by_index(self.scale_idx, self)
+            fps, td, fps_index = utils.get_fps_td_by_index(self.scale_idx, self.stop_scale_time, self.sampling_rates, self.org_fps, 0)
             self.fps = fps
             self.td = td
             self.fps_index = fps_index
@@ -131,4 +132,4 @@ if __name__ == '__main__':
     dataset_generator = SingleVideoDataset(opt)
     opt.get_fps_index()
     # 打印数据条数
-    print(dataset_generator[0].shape)
+    print(dataset_generator[0])

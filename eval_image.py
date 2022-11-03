@@ -3,8 +3,11 @@ import os
 from glob import glob
 import ast
 import pickle as pkl
-import logging
 import colorama
+import numpy as np
+import imageio
+from scipy import linalg
+import logging
 
 import mindspore
 from mindspore import context, Tensor
@@ -72,9 +75,33 @@ def eval(opt, netG):
         random_samples.append(fake_var)
 
     random_samples = ops.Concat(0)(random_samples)
-    with open(os.path.join(opt.saver.eval_dir, 'random_samples.pkl'), 'wb') as f:
-        pkl.dump(random_samples, f)
+    with open(os.path.join(opt.saver.eval_dir, 'random_samples.npy'), 'wb') as f:
+        np.save(f, random_samples.asnumpy())
     epoch_iterator.close()
+
+
+def generate_images(opt):
+    original = opt.dataset.generate_image(opt.scale_idx)
+    mu_o, sigma_o = utils.calculate_activation_statistics(original)
+
+    for exp_dir in opt.experiments:
+        fakes_path = os.path.join(opt.saver.eval_dir, 'random_samples.npy')
+        print(fakes_path)
+        os.makedirs(os.path.join(opt.saver.eval_dir, opt.save_path), exist_ok=True)
+        print('Generating dir {}'.format(os.path.join(exp_dir, opt.save_path)))
+
+        with open(fakes_path, 'rb') as f:
+            random_samples = Tensor(np.load(f))
+        random_samples = ops.Transpose()(random_samples, (0, 2, 3, 1))[:opt.max_samples]
+        random_samples = (random_samples + 1) / 2
+        random_samples = random_samples[:20] * 255
+        random_samples = (random_samples.asnumpy()).astype(np.uint8)
+        for i, sample in enumerate(random_samples):
+            imageio.imwrite(os.path.join(opt.saver.eval_dir, opt.save_path, 'fake_{}.png'.format(i)), sample)
+            # SIFID
+            mu, sigma = utils.calculate_activation_statistics(sample)
+            sifid = utils.calculate_frechet_distance(mu, sigma, mu_o, sigma_o)
+            logging.logbook(f'SIFID: {sifid}')
 
 
 if __name__ == '__main__':
@@ -84,10 +111,13 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--exp-dir', required=True, help="Experiment directory")
     parser.add_argument('--num-samples', type=int, default=10, help='number of samples to generate')
-    parser.add_argument('--netG', default='netG.ckpt', help="path to netG (to continue training)")
+    parser.add_argument('--netG', default='netG_9.ckpt', help="path to netG (to continue training)")
     parser.add_argument('--niter', type=int, default=1, help='number of epochs')
     parser.add_argument('--batch-size', type=int, default=1)
     parser.add_argument('--data-rep', type=int, default=1, help='data repetition')
+    # Extract images
+    parser.add_argument('--max-samples', type=int, default=4, help="Maximum number of samples")
+    parser.add_argument('--save-path', default='images', help="New directory to be created for outputs")
 
     parser.set_defaults(hflip=False)
     opt = parser.parse_args()
@@ -144,10 +174,9 @@ if __name__ == '__main__':
         opt.Noise_Amps = []
 
         # Dataset
-        dataset = SingleImageDataset(opt)
-        data_loader = GeneratorDataset(dataset, ['data', 'zero-scale data'], shuffle=True)
-        data_loader = data_loader.batch(opt.batch_size)
-        opt.data_loader = data_loader
+        opt.dataset = SingleImageDataset(opt)
+        data_loader = GeneratorDataset(opt.dataset, ['data', 'zero-scale data'], shuffle=True)
+        opt.data_loader = data_loader.batch(opt.batch_size)
 
         ## Current networks
         assert hasattr(networks_2d, opt.generator)
@@ -169,3 +198,5 @@ if __name__ == '__main__':
 
         ## Eval
         eval(opt, netG)
+        opt.experiments = sorted(glob(opt.exp_dir))
+        generate_images(opt)

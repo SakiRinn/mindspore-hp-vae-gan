@@ -5,7 +5,10 @@ import os
 import colorama
 import logging
 
+import sys
+sys.path.insert(0, '.')
 from utils import logger, tools
+
 from modules import networks_2d
 from modules.losses import DWithLoss, GWithLoss
 from modules.optimizers import ClippedAdam
@@ -168,10 +171,10 @@ def train(opt, netG):
         # Print
         if (iteration + 1) % opt.print_interval == 0:
             if opt.vae_levels >= opt.scale_idx + 1:
-                logging.debug('[Scale {}/Iter {}] Noise amp: {}, Gloss: {}'.format(
+                logging.logbook('[Scale {}/Iter {}] Noise amp: {}, Gloss: {}'.format(
                     opt.scale_idx + 1, iteration + 1, opt.noise_amp, curG_loss))
             else:
-                logging.debug('[Scale {}/Iter {}] Noise amp: {}, Gloss: {}, Dloss: {}'.format(
+                logging.logbook('[Scale {}/Iter {}] Noise amp: {}, Gloss: {}, Dloss: {}'.format(
                     opt.scale_idx + 1, iteration + 1, opt.noise_amp, curG_loss, curD_loss))
 
         # Visualize
@@ -204,7 +207,7 @@ def train(opt, netG):
 
     ## Save data
     opt.saver.save_json({'noise_amps': opt.Noise_Amps, 'scale_idx': opt.scale_idx}, 'intermediate.json')
-    opt.saver.save_checkpoint(G_curr, 'netG.ckpt')
+    opt.saver.save_checkpoint(G_curr, f'netD_{opt.scale_idx}.ckpt')
     if opt.vae_levels < opt.scale_idx + 1:
         opt.saver.save_checkpoint(D_curr, f'netD_{opt.scale_idx}.ckpt')
 
