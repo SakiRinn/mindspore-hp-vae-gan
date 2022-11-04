@@ -2,11 +2,9 @@ import argparse
 import os
 from glob import glob
 import ast
-import pickle as pkl
 import colorama
 import numpy as np
 import imageio
-from scipy import linalg
 import logging
 
 import mindspore
@@ -98,10 +96,6 @@ def generate_images(opt):
         random_samples = (random_samples.asnumpy()).astype(np.uint8)
         for i, sample in enumerate(random_samples):
             imageio.imwrite(os.path.join(opt.saver.eval_dir, opt.save_path, 'fake_{}.png'.format(i)), sample)
-            # SIFID
-            mu, sigma = utils.calculate_activation_statistics(sample)
-            sifid = utils.calculate_frechet_distance(mu, sigma, mu_o, sigma_o)
-            logging.logbook(f'SIFID: {sifid}')
 
 
 if __name__ == '__main__':

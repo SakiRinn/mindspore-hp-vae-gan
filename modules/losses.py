@@ -70,6 +70,7 @@ class GWithLoss(nn.Cell):
         self.disc_loss_weight = opt.disc_loss_weight
 
     def construct(self, real, real_zero, noise_init, noise_amps, isVAE=False):
+        total_loss = 0
         # Forward
         return_list = self.backbone_network(real_zero, noise_amps, isRandom=False)
         generated = return_list[0]
@@ -83,9 +84,10 @@ class GWithLoss(nn.Cell):
             kl_loss = kl_criterion(mu, logvar)
             vae_loss = self.rec_weight * rec_vae_loss + self.kl_weight * kl_loss
 
-            return vae_loss
+            total_loss += vae_loss
         else:
             ## (2) Generator loss
+            errG_total = 0
             rec_loss = self.rec_loss(generated, real)
             errG_total = self.rec_weight * rec_loss
 
@@ -98,7 +100,9 @@ class GWithLoss(nn.Cell):
             errG = -output.mean() * self.disc_loss_weight
             errG_total += errG
 
-            return errG_total
+            total_loss += errG_total
+
+        return total_loss
 
     @property
     def backbone_network(self):
@@ -129,5 +133,4 @@ if __name__ == '__main__':
             self.rec_weight = 10.0
 
     opt = Opt()
-    print(ops.UniformReal()((1, 1))
-)
+    print(ops.UniformReal()((1, 1)))

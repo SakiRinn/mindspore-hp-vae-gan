@@ -37,14 +37,14 @@ def p2m_HPVAEGAN_2d(netG_pth) -> OrderedDict:
                 num = int(re.search(r"\d+", prefix).group())
                 key = key.replace(prefix, f"_features.{num}.")
             elif "mu" in key:
-                key = key.replace("mu.", "_mu.")
+                key = key.replace("mu.", "_mu.", 1)
             elif "logvar" in key:
-                key = key.replace("logvar.", "_logvar.")
+                key = key.replace("logvar.", "_logvar.", 1)
             # module
             if "conv." in key:
-                key = key.replace("conv.", "0.")
+                key = key.replace("conv.", "0.", 1)
                 if "weight_orig" in key:
-                    key = key.replace("weight_orig", "weight")
+                    key = key.replace("weight_orig", "weight", 1)
 
         ## Decoder & Body
         if 'decoder.' in key or re.search(r"body.\d+.", key) is not None:

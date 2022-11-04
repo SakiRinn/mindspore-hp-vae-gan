@@ -30,6 +30,8 @@ def train(opt, netG):
     ## Current Networks
     D_curr = getattr(networks_2d, opt.discriminator)(opt)
     G_curr = netG
+    for key, value in G_curr.parameters_dict().items():
+        print(key, value.shape)
 
     if opt.vae_levels < opt.scale_idx + 1:
         # Load parameters for discriminator
@@ -107,7 +109,6 @@ def train(opt, netG):
     #############
     ### TRAIN ###
     #############
-    total_loss = 0
     iterator = iter(opt.data_loader)
 
     for iteration in epoch_iterator:
@@ -158,7 +159,6 @@ def train(opt, netG):
             curD_loss = D_train(real, noise_init, opt.Noise_Amps)
             # (3) Update generator: maximize D(G(z)) (After grad clipping)
             curG_loss = G_train(real, real_zero, noise_init, opt.Noise_Amps, False)
-        total_loss += curG_loss
 
 
         ## Verbose
