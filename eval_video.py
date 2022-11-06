@@ -4,7 +4,7 @@ import os
 from glob import glob
 import ast
 
-from utils import logger, tools
+from utils import logger
 import logging
 import colorama
 
@@ -13,6 +13,7 @@ from torch.utils.data import DataLoader
 
 from modules import networks_3d
 from datasets import SingleVideoDataset
+from utils import progress_bar
 
 clear = colorama.Style.RESET_ALL
 blue = colorama.Fore.CYAN + colorama.Style.BRIGHT
@@ -53,7 +54,7 @@ def eval(opt, netG):
         "logging_on_close": True,
         "postfix": True
     }
-    epoch_iterator = tools.create_progressbar(**progressbar_args)
+    epoch_iterator = progress_bar.create_progressbar(**progressbar_args)
 
     iterator = iter(data_loader)
 
@@ -128,7 +129,7 @@ if __name__ == '__main__':
         "logging_on_close": True,
         "postfix": True
     }
-    exp_iterator = tools.create_progressbar(**progressbar_args)
+    exp_iterator = progress_bar.create_progressbar(**progressbar_args)
 
     for idx, exp_dir in enumerate(exp_iterator):
         opt.experiment_dir = exp_dir

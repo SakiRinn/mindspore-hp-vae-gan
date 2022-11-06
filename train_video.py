@@ -5,7 +5,7 @@ import os
 import colorama
 import logging
 
-from utils import logger, tools
+from utils import logger, progress_bar
 from modules import networks_3d
 from modules.losses import DWithLoss, GWithLoss
 from modules.optimizers import ClippedAdam
@@ -121,7 +121,7 @@ def train(opt, netG):
         "logging_on_close": True,
         "postfix": True
     }
-    epoch_iterator = tools.create_progressbar(**progressbar_args)
+    epoch_iterator = progress_bar.create_progressbar(**progressbar_args)
 
 
     #############

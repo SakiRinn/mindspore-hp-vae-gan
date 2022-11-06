@@ -14,6 +14,7 @@ import sys
 sys.path.insert(0, '.')
 import datasets
 import utils
+import tools
 
 
 def get_activation(act):
@@ -60,7 +61,7 @@ class ConvBlock3DSN(nn.SequentialCell):
     def __init__(self, in_channel, out_channel, ker_size, padding, stride, bn=True, act='lrelu'):
         super(ConvBlock3DSN, self).__init__()
         if bn:
-            self.append(utils.SpectualNormConv3d(in_channel, out_channel, kernel_size=ker_size,
+            self.append(tools.SpectualNormConv3d(in_channel, out_channel, kernel_size=ker_size,
                                                  stride=stride, padding=padding, weight_init=Normal(0.02, 0.0),
                                                  pad_mode='pad', has_bias=True))
         else:

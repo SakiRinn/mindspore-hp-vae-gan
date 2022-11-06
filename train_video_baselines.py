@@ -3,7 +3,7 @@ import utils
 import random
 import os
 
-from utils import logger, tools
+from utils import logger
 import logging
 import colorama
 
@@ -14,6 +14,7 @@ import torch.optim as optim
 from modules import networks_3d
 import utils
 from datasets import SingleVideoDataset
+from utils import progress_bar
 
 clear = colorama.Style.RESET_ALL
 blue = colorama.Fore.CYAN + colorama.Style.BRIGHT
@@ -85,7 +86,7 @@ def train(opt, netG):
         "logging_on_close": True,
         "postfix": True
     }
-    epoch_iterator = tools.create_progressbar(**progressbar_args)
+    epoch_iterator = progress_bar.create_progressbar(**progressbar_args)
 
     iterator = iter(data_loader)
 

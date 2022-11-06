@@ -5,10 +5,7 @@ import os
 import colorama
 import logging
 
-import sys
-sys.path.insert(0, '.')
-from utils import logger, tools
-
+from utils import progress_bar, logger
 from modules import networks_2d
 from modules.losses import DWithLoss, GWithLoss
 from modules.optimizers import ClippedAdam
@@ -103,7 +100,7 @@ def train(opt, netG):
         "logging_on_close": True,
         "postfix": True
     }
-    epoch_iterator = tools.create_progressbar(**progressbar_args)
+    epoch_iterator = progress_bar.create_progressbar(**progressbar_args)
 
 
     #############
@@ -207,7 +204,7 @@ def train(opt, netG):
 
     ## Save data
     opt.saver.save_json({'noise_amps': opt.Noise_Amps, 'scale_idx': opt.scale_idx}, 'intermediate.json')
-    opt.saver.save_checkpoint(G_curr, f'netD_{opt.scale_idx}.ckpt')
+    opt.saver.save_checkpoint(G_curr, f'netG_{opt.scale_idx}.ckpt')
     if opt.vae_levels < opt.scale_idx + 1:
         opt.saver.save_checkpoint(D_curr, f'netD_{opt.scale_idx}.ckpt')
 

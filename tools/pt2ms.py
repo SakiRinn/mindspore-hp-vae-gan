@@ -1,8 +1,6 @@
 from collections import OrderedDict
 import re
-import json
 
-import torch
 import mindspore
 from mindspore import Tensor, Parameter
 
@@ -109,52 +107,3 @@ def m2m_HPVAEGAN_2d(netG_pth) -> OrderedDict:
 def load_intermediate(netG_pth) -> OrderedDict:
     new_state = OrderedDict(noise_amps=netG_pth['noise_amps'], scale_idx=netG_pth['scale'])
     return new_state
-
-
-if __name__ == '__main__':
-    import modules.networks_2d as networks_2d
-    from glob import glob
-    import argparse
-    import os
-    import ast
-    from mindspore import context
-
-    context.set_context(mode=0, device_id=5)
-
-    pth = torch.load("./netG_9.pth", map_location=torch.device('cpu'))
-    inter = load_intermediate(pth)
-    ckpt = p2m_HPVAEGAN_2d(pth)
-
-    ## Opt
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--exp-dir', default='run/air_balloons/myimagetest/experiment_1', help="Experiment directory")
-    parser.add_argument('--generator', type=str, default='GeneratorHPVAEGAN', help='generator model')
-    parser.add_argument('--discriminator', type=str, default='WDiscriminator2D', help='discriminator model')
-    opt = parser.parse_args()
-
-    # exceptions = ['niter', 'data_rep', 'batch_size', 'netG']
-    all_dirs = glob(opt.exp_dir)
-
-    for idx, exp_dir in enumerate(all_dirs):
-        opt.experiment_dir = exp_dir
-        keys = vars(opt).keys()
-        with open(os.path.join(exp_dir, 'args.txt'), 'r') as f:
-            for line in f.readlines():
-                log_arg = line.replace(' ', '').replace('\n', '').split(':')
-                assert len(log_arg) == 2
-                # if log_arg[0] in exceptions:
-                #     continue
-                try:
-                    setattr(opt, log_arg[0], ast.literal_eval(log_arg[1]))
-                except Exception:
-                    setattr(opt, log_arg[0], log_arg[1])
-
-    ## Current networks
-    assert hasattr(networks_2d, opt.generator)
-    netG = getattr(networks_2d, opt.generator)(opt)
-
-    ## Load
-    for _ in range(inter['scale_idx']):
-        netG.init_next_stage()
-    mindspore.load_param_into_net(netG, ckpt)
-    mindspore.save_checkpoint(netG, 'test.ckpt')

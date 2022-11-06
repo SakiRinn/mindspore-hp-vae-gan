@@ -141,3 +141,7 @@ log.txt
 logbook.txt
 run
 .vscode
+*.ckpt
+nohup.out
+*.pth
+*.log

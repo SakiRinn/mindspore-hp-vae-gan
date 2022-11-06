@@ -6,16 +6,16 @@ import colorama
 import numpy as np
 import imageio
 import logging
+import json
 
 import mindspore
 from mindspore import context, Tensor
 import mindspore.ops as ops
 from mindspore.dataset import GeneratorDataset
 
-import sys
-sys.path.insert(0, '.')
 import utils
-from utils import logger, tools
+from utils import progress_bar, logger
+import tools.pt2ms as pt2ms
 from modules import networks_2d
 from datasets.image import SingleImageDataset
 
@@ -42,7 +42,7 @@ def eval(opt, netG):
         "logging_on_close": True,
         "postfix": True
     }
-    epoch_iterator = tools.create_progressbar(**progressbar_args)
+    epoch_iterator = progress_bar.create_progressbar(**progressbar_args)
 
     random_samples = []
     for iteration in epoch_iterator:
@@ -79,9 +79,6 @@ def eval(opt, netG):
 
 
 def generate_images(opt):
-    original = opt.dataset.generate_image(opt.scale_idx)
-    mu_o, sigma_o = utils.calculate_activation_statistics(original)
-
     for exp_dir in opt.experiments:
         fakes_path = os.path.join(opt.saver.eval_dir, 'random_samples.npy')
         print(fakes_path)
@@ -99,13 +96,13 @@ def generate_images(opt):
 
 
 if __name__ == '__main__':
-    context.set_context(mode=0, device_id=5)
+    context.set_context(mode=1, device_id=5)
 
     # Argument Parser
     parser = argparse.ArgumentParser()
     parser.add_argument('--exp-dir', required=True, help="Experiment directory")
     parser.add_argument('--num-samples', type=int, default=10, help='number of samples to generate')
-    parser.add_argument('--netG', default='netG_9.ckpt', help="path to netG (to continue training)")
+    parser.add_argument('--netG', default='netG.ckpt', help="path to netG (to continue training)")
     parser.add_argument('--niter', type=int, default=1, help='number of epochs')
     parser.add_argument('--batch-size', type=int, default=1)
     parser.add_argument('--data-rep', type=int, default=1, help='data repetition')
@@ -128,7 +125,8 @@ if __name__ == '__main__':
         "logging_on_close": True,
         "postfix": True
     }
-    exp_iterator = tools.create_progressbar(**progressbar_args)
+    exp_iterator = progress_bar.create_progressbar(**progressbar_args)
+    logger.configure_logging(os.path.abspath(os.path.join(opt.exp_dir, 'logbook.txt')))
 
     for idx, exp_dir in enumerate(exp_iterator):
         opt.experiment_dir = exp_dir
@@ -156,9 +154,6 @@ if __name__ == '__main__':
         # Tensorboard Summary
         # opt.summary = utils.TensorboardSummary(opt.saver.eval_dir)
 
-        # Logger
-        logger.configure_logging(os.path.abspath(os.path.join(opt.experiment_dir, 'logbook.txt')))
-
         # Adjust scales
         utils.adjust_scales2image(opt.img_size, opt)
 
@@ -172,10 +167,6 @@ if __name__ == '__main__':
         data_loader = GeneratorDataset(opt.dataset, ['data', 'zero-scale data'], shuffle=True)
         opt.data_loader = data_loader.batch(opt.batch_size)
 
-        ## Current networks
-        assert hasattr(networks_2d, opt.generator)
-        netG = getattr(networks_2d, opt.generator)(opt)
-
         # Init
         opt.Noise_Amps = opt.saver.load_json('intermediate.json')['noise_amps']
         opt.scale_idx = opt.saver.load_json('intermediate.json')['scale_idx']
@@ -186,6 +177,17 @@ if __name__ == '__main__':
         if not os.path.isfile(opt.netG):
             raise RuntimeError("=> no <G> checkpoint found at '{}'".format(opt.netG))
         checkpoint = mindspore.load_checkpoint(opt.netG)
+        if opt.netG.endswith('.pth'):
+            intermediate = pt2ms.load_intermediate(checkpoint)
+            with open(os.path.join(opt.exp_dir, 'intermediate.json'), 'w') as f:
+                json.dump(intermediate, f, indent=4)
+            checkpoint = pt2ms.p2m_HPVAEGAN_2d(checkpoint)
+        elif opt.netG.endswith('.ckpt'):
+            checkpoint = pt2ms.m2m_HPVAEGAN_2d(checkpoint)
+
+        ## Current networks
+        assert hasattr(networks_2d, opt.generator)
+        netG = getattr(networks_2d, opt.generator)(opt)
         for _ in range(opt.scale_idx):
             netG.init_next_stage()
         mindspore.load_param_into_net(netG, checkpoint)

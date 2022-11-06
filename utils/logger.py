@@ -8,7 +8,7 @@ import os
 import re
 import sys
 
-from utils import tools
+from utils import progress_bar
 
 
 def get_default_logging_format(colorize=False, brackets=False):
@@ -72,7 +72,7 @@ def configure_logging(filename=None):
     sys.modules[__name__].global_indent = 0
 
     # add custom tqdm logger
-    tools.addLoggingLevel("LOGBOOK", 1000)
+    progress_bar.addLoggingLevel("LOGBOOK", 1000)
 
     # create logger
     root_logger = logging.getLogger("")

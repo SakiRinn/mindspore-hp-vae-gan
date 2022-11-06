@@ -1,4 +1,4 @@
-from .trilinear import UpsampleTrilinear3D
+from tools import UpsampleTrilinear3D
 import math
 import numpy as np
 

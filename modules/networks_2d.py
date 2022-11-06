@@ -12,6 +12,7 @@ from mindspore.common.initializer import Normal
 import sys
 sys.path.insert(0, '.')
 import utils
+import tools
 
 
 def get_activation(act):
@@ -58,7 +59,7 @@ class ConvBlock2DSN(nn.SequentialCell):
     def __init__(self, in_channel, out_channel, ker_size, padding, stride, bn=True, act='lrelu'):
         super(ConvBlock2DSN, self).__init__()
         if bn:
-            self.append(utils.SpectualNormConv2d(in_channel, out_channel, kernel_size=ker_size,
+            self.append(tools.SpectualNormConv2d(in_channel, out_channel, kernel_size=ker_size,
                                                  stride=stride, weight_init=Normal(0.02, 0.0),
                                                  padding=padding, pad_mode='pad', has_bias=True))
         else:
