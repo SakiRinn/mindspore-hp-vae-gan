@@ -24,7 +24,10 @@ train_image.py, train_video.py已完工。测试中。
 
 ```shell
 python train_image.py --image-path data/imgs/air_balloons.jpg --vae-levels 3 --checkname myimagetest --niter 5000
+ckpt
 python eval_image.py --num-samples 100 --exp-dir run/air_balloons/myimagetest/experiment_1/
+pth
+python eval_image.py --num-samples 100 --exp-dir run/air_balloons/myimagetest/experiment_3/ --netG netG_9.pth
 python extract_images.py --max-samples 4 --exp-dir run/air_balloons/myimagetest/experiment_0/eval/
 
 python train_video.py --video-path data/vids/air_balloons.mp4 --vae-levels 3 --checkname myvideotest --niter 5000

@@ -94,13 +94,13 @@ def m2m_HPVAEGAN_2d(netG_pth) -> OrderedDict:
     for key, value in netG_pth.items():
 
         ## Body
-        if 'encode.' not in key and 'decoder.' in key:
+        if 'encode.' not in key and 'decoder.' not in key:
             num = int(re.search(r"^(\d+?)\.", key).group(1))
             if num != 0:
                 key = key.replace(f"{num}.", f"0.0.{num}.", 1)
             key = 'body.' + key
 
-        new_state[key] = Parameter(Tensor(value.numpy()).astype(mindspore.float32))
+        new_state[key] = Parameter(Tensor(value).astype(mindspore.float32))
     return new_state
 
 

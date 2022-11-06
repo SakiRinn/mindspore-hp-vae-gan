@@ -1,17 +1,13 @@
-import argparse
+import os
+import imageio
+import moviepy.editor as mpy
+import numpy as np
+
 import mindspore
 from mindspore import Tensor
+from mindspore import dtype as mstype
 from mindspore.common.initializer import One
 import mindspore.ops as ops
-from mindspore import dtype as mstype
-import numpy as np
-import moviepy.editor as mpy
-import imageio
-from glob import glob
-import os
-from torchvision.utils import make_grid
-
-transpose = ops.Transpose()
 
 
 def make_video(tensor, fps, filename):
@@ -27,6 +23,23 @@ def make_video(tensor, fps, filename):
             clip.write_gif(filename, verbose=False)
 
 
+def generate_images(opt):
+    for exp_dir in opt.experiments:
+        fakes_path = os.path.join(opt.saver.eval_dir, 'random_samples.npy')
+        print(fakes_path)
+        os.makedirs(os.path.join(opt.saver.eval_dir, opt.save_path), exist_ok=True)
+        print('Generating dir {}'.format(os.path.join(exp_dir, opt.save_path)))
+
+        with open(fakes_path, 'rb') as f:
+            random_samples = Tensor(np.load(f))
+        random_samples = ops.Transpose()(random_samples, (0, 2, 3, 1))[:opt.max_samples]
+        random_samples = (random_samples + 1) / 2
+        random_samples = random_samples[:20] * 255
+        random_samples = (random_samples.asnumpy()).astype(np.uint8)
+        for i, sample in enumerate(random_samples):
+            imageio.imwrite(os.path.join(opt.saver.eval_dir, opt.save_path, 'fake_{}.png'.format(i)), sample)
+
+
 def generate_gifs(opt):
     for exp_dir in opt.experiments:
         reals_path = os.path.join(exp_dir, 'real_full_scale.pth')
@@ -37,25 +50,26 @@ def generate_gifs(opt):
         real_sample = mindspore.load(reals_path)
         make_video(real_sample, 4, os.path.join(exp_dir, opt.save_path, 'real.gif'))
 
-        random_samples = transpose(mindspore.load_checkpoint(fakes_path), (0, 2, 3, 4, 1))[:opt.max_samples]
+        with open(fakes_path, 'rb') as f:
+            random_samples = Tensor(np.load(f))
+        random_samples = ops.Transpose()(random_samples, (0, 2, 3, 4, 1))[:opt.max_samples]
 
         # Make grid
-        real_transpose = transpose(Tensor(real_sample), (0, 3, 1, 2))[::2]  # TxCxHxW
-        grid_image = transpose(make_grid(real_transpose, real_transpose.shape[0]), (1, 2, 0))
-        imageio.imwrite(os.path.join(exp_dir, opt.save_path, 'real_unfold.png'), 
+        real_transpose = ops.Transpose()(Tensor(real_sample), (0, 3, 1, 2))[::2]  # TxCxHxW
+        grid_image = ops.Transpose()(make_grid(real_transpose, real_transpose.shape[0]), (1, 2, 0))
+        imageio.imwrite(os.path.join(exp_dir, opt.save_path, 'real_unfold.png'),
                         grid_image.data.numpy())
 
         fake = (random_samples.data.cpu().numpy() * 255).astype(np.uint8)
         fake_transpose = Tensor(fake).permute(0, 1, 4, 2, 3)[:, ::2]  # BxTxCxHxW
         fake_reshaped = fake_transpose.flatten(0, 1)  # (B+T)xCxHxW
-        grid_image = transpose(make_grid(fake_reshaped[:10 * fake_transpose.shape[1], :, :, :], 
+        grid_image = ops.Transpose()(make_grid(fake_reshaped[:10 * fake_transpose.shape[1], :, :, :],
                                          fake_transpose.shape[1]
                                         ), (1, 2, 0))
-        imageio.imwrite(os.path.join(exp_dir, opt.save_path, 'fake_unfold.png'), 
+        imageio.imwrite(os.path.join(exp_dir, opt.save_path, 'fake_unfold.png'),
                         grid_image.data.numpy())
 
-        white_space = Tensor(shape=random_samples.shape, 
-                             init=One(), dtype=mstype.float32)[:, :, :, :10] * 255
+        white_space = Tensor(shape=random_samples.shape, init=One(), dtype=mstype.float32)[:, :, :, :10] * 255
 
         random_samples = random_samples.data.cpu().numpy()
         random_samples = (random_samples * 255).astype(np.uint8)
@@ -70,16 +84,3 @@ def generate_gifs(opt):
                 concat_gif.append(vid)
         concat_gif = np.concatenate(concat_gif, axis=2)
         make_video(concat_gif, 4, os.path.join(exp_dir, opt.save_path, 'fakes.gif'))
-
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-
-    parser.add_argument('--exp-dir', required=True, help="Experiment directory (glob format)")
-    parser.add_argument('--max-samples', type=int, default=4, help="Maximum number of samples")
-    parser.add_argument('--save-path', default='gifs', help="New directory to be created for outputs")
-
-    opt = parser.parse_args()
-
-    opt.experiments = sorted(glob(opt.exp_dir))
-    generate_gifs(opt)

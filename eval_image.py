@@ -4,10 +4,10 @@ from glob import glob
 import ast
 import colorama
 import numpy as np
-import imageio
 import logging
 import json
 
+import torch
 import mindspore
 from mindspore import context, Tensor
 import mindspore.ops as ops
@@ -78,23 +78,6 @@ def eval(opt, netG):
     epoch_iterator.close()
 
 
-def generate_images(opt):
-    for exp_dir in opt.experiments:
-        fakes_path = os.path.join(opt.saver.eval_dir, 'random_samples.npy')
-        print(fakes_path)
-        os.makedirs(os.path.join(opt.saver.eval_dir, opt.save_path), exist_ok=True)
-        print('Generating dir {}'.format(os.path.join(exp_dir, opt.save_path)))
-
-        with open(fakes_path, 'rb') as f:
-            random_samples = Tensor(np.load(f))
-        random_samples = ops.Transpose()(random_samples, (0, 2, 3, 1))[:opt.max_samples]
-        random_samples = (random_samples + 1) / 2
-        random_samples = random_samples[:20] * 255
-        random_samples = (random_samples.asnumpy()).astype(np.uint8)
-        for i, sample in enumerate(random_samples):
-            imageio.imwrite(os.path.join(opt.saver.eval_dir, opt.save_path, 'fake_{}.png'.format(i)), sample)
-
-
 if __name__ == '__main__':
     context.set_context(mode=1, device_id=5)
 
@@ -106,6 +89,7 @@ if __name__ == '__main__':
     parser.add_argument('--niter', type=int, default=1, help='number of epochs')
     parser.add_argument('--batch-size', type=int, default=1)
     parser.add_argument('--data-rep', type=int, default=1, help='data repetition')
+    parser.add_argument('--scale-idx', type=int, default=-1, help='current scale idx (=len of body)')
     # Extract images
     parser.add_argument('--max-samples', type=int, default=4, help="Maximum number of samples")
     parser.add_argument('--save-path', default='images', help="New directory to be created for outputs")
@@ -113,7 +97,7 @@ if __name__ == '__main__':
     parser.set_defaults(hflip=False)
     opt = parser.parse_args()
 
-    exceptions = ['niter', 'data_rep', 'batch_size', 'netG']
+    exceptions = ['niter', 'data_rep', 'batch_size', 'netG', 'scale_idx']
     all_dirs = glob(opt.exp_dir)
 
     progressbar_args = {
@@ -157,33 +141,28 @@ if __name__ == '__main__':
         # Adjust scales
         utils.adjust_scales2image(opt.img_size, opt)
 
-        # Initial parameters
-        opt.scale_idx = 0
-        opt.nfc_prev = 0
-        opt.Noise_Amps = []
-
         # Dataset
         opt.dataset = SingleImageDataset(opt)
         data_loader = GeneratorDataset(opt.dataset, ['data', 'zero-scale data'], shuffle=True)
         opt.data_loader = data_loader.batch(opt.batch_size)
 
-        # Init
-        opt.Noise_Amps = opt.saver.load_json('intermediate.json')['noise_amps']
-        opt.scale_idx = opt.saver.load_json('intermediate.json')['scale_idx']
-        opt.resumed_idx = opt.saver.load_json('intermediate.json')['scale_idx']
-        opt.resume_dir = '/'.join(opt.netG.split('/')[:-1])
-
         # Load
         if not os.path.isfile(opt.netG):
             raise RuntimeError("=> no <G> checkpoint found at '{}'".format(opt.netG))
-        checkpoint = mindspore.load_checkpoint(opt.netG)
         if opt.netG.endswith('.pth'):
+            checkpoint = torch.load(opt.netG, map_location=torch.device('cpu'))
             intermediate = pt2ms.load_intermediate(checkpoint)
             with open(os.path.join(opt.exp_dir, 'intermediate.json'), 'w') as f:
                 json.dump(intermediate, f, indent=4)
             checkpoint = pt2ms.p2m_HPVAEGAN_2d(checkpoint)
         elif opt.netG.endswith('.ckpt'):
+            checkpoint = mindspore.load_checkpoint(opt.netG)
             checkpoint = pt2ms.m2m_HPVAEGAN_2d(checkpoint)
+
+        # Init
+        if opt.scale_idx == -1:
+            opt.scale_idx = opt.saver.load_json('intermediate.json')['scale_idx']
+        opt.Noise_Amps = opt.saver.load_json('intermediate.json')['noise_amps'][:opt.scale_idx + 1]
 
         ## Current networks
         assert hasattr(networks_2d, opt.generator)
@@ -195,4 +174,4 @@ if __name__ == '__main__':
         ## Eval
         eval(opt, netG)
         opt.experiments = sorted(glob(opt.exp_dir))
-        generate_images(opt)
+        utils.generate_images(opt)
