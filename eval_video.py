@@ -24,7 +24,6 @@ magenta = colorama.Fore.MAGENTA + colorama.Style.BRIGHT
 @torch.no_grad()
 def eval(opt, netG):
     # Re-generate dataset frames
-
     fps, td, fps_index = utils.get_fps_td_by_index(opt.scale_idx, opt)
     opt.fps = fps
     opt.td = td

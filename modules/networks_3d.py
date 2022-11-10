@@ -100,17 +100,17 @@ class Encode3DVAE(nn.Cell):
                 exit(1)
             output_dim = out_dim
 
-        self.features = FeatureExtractor(opt.nc_im, opt.nfc, opt.ker_size, opt.ker_size // 2, 1,
+        self._features = FeatureExtractor(opt.nc_im, opt.nfc, opt.ker_size, opt.ker_size // 2, 1,
                                          num_blocks=num_blocks)
-        self.mu = ConvBlock3D(opt.nfc, output_dim, opt.ker_size,
+        self._mu = ConvBlock3D(opt.nfc, output_dim, opt.ker_size,
                               opt.ker_size // 2, 1, bn=False, act=None)
-        self.logvar = ConvBlock3D(opt.nfc, output_dim, opt.ker_size,
+        self._logvar = ConvBlock3D(opt.nfc, output_dim, opt.ker_size,
                                   opt.ker_size // 2, 1, bn=False, act=None)
 
     def construct(self, x):
-        features = self.features(x)
-        mu = self.mu(features)
-        logvar = self.logvar(features)
+        features = self._features(x)
+        mu = self._mu(features)
+        logvar = self._logvar(features)
 
         return mu, logvar
 
@@ -180,8 +180,9 @@ class WDiscriminator3D(nn.Cell):
                                   opt.ker_size // 2, stride=1, bn=True, act='lrelu')
 
         # FIXME: Name BUG.
-        self.body = nn.SequentialCell([])
-        for _ in range(opt.num_layer):
+        self.body = nn.SequentialCell([ConvBlock3DSN(N, N, opt.ker_size,
+                                       opt.ker_size // 2, stride=1, bn=True, act='lrelu')])
+        for _ in range(opt.num_layer - 1):
             self.body.append(ConvBlock3DSN(N, N, opt.ker_size,
                                            opt.ker_size // 2, stride=1, bn=True, act='lrelu'))
 
@@ -361,6 +362,7 @@ class GeneratorHPVAEGAN(nn.Cell):
         self.fps_lcm = opt.fps_lcm
         self.ar = opt.ar
         self.vae_levels = opt.vae_levels
+        self.train_all = opt.train_all
 
         N = int(opt.nfc)
         self.N = N
@@ -550,7 +552,7 @@ if __name__ == '__main__':
     import cv2
     import numpy as np
 
-    context.set_context(device_target='Ascend', device_id=7, mode=0)
+    context.set_context(device_id=6, mode=1)
 
     class Opt:
         def __init__(self):
@@ -580,8 +582,9 @@ if __name__ == '__main__':
 
     opt = Opt()
     model = GeneratorHPVAEGAN(opt)
-    model.init_next_stage()
+    for i in range(1):
+        model.init_next_stage()
     from mindspore.common.initializer import One
-    x = Tensor(shape=(8, 3, 2, 2, 2), init=One(), dtype=mstype.float32)
+    x = Tensor(shape=(8, 3, 4, 2, 2), init=One(), dtype=mstype.float32)
     y = model(x, opt.Noise_Amps)
-    print(y[0].shape, y[1].shape, len(y))
+    print(y[0].shape, y[1].shape)

@@ -37,7 +37,7 @@ def generate_images(opt):
         random_samples = random_samples[:20] * 255
         random_samples = (random_samples.asnumpy()).astype(np.uint8)
         for i, sample in enumerate(random_samples):
-            imageio.imwrite(os.path.join(opt.saver.eval_dir, opt.save_path, 'fake_{}.png'.format(i)), sample)
+            imageio.imwrite(os.path.join(opt.saver.eval_dir, opt.save_path, f'fake_{i}.png'), sample)
 
 
 def generate_gifs(opt):

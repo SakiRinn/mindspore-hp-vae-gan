@@ -93,7 +93,7 @@ if __name__ == '__main__':
             self.img_size = 256
             self.scale_factor = 0.75
             self.stop_scale = 9
-            self.scale_idx = 1
+            self.scale_idx = 2
             self.batch_size = 2
             self.data_rep = 1000
 
@@ -105,4 +105,4 @@ if __name__ == '__main__':
     dataset = dataset.shuffle(4)
     dl = dataset.create_tuple_iterator()
     # 打印数据条数
-    print(dataset_generator[0][0].shape)
+    print(dataset_generator[500][0].shape, dataset_generator[500][0].shape)

@@ -120,16 +120,12 @@ if __name__ == '__main__':
             self.start_frame = 0
             self.max_frames = 13
             self.org_fps = 24.0
-
-        def get_fps_index(self):
-            fps, td, fps_index = utils.get_fps_td_by_index(self.scale_idx, self.stop_scale_time, self.sampling_rates, self.org_fps, 0)
-            self.fps = fps
-            self.td = td
-            self.fps_index = fps_index
+            self.fps = 6.0
+            self.td = 4
+            self.fps_index = 0
 
     opt = Opt()
     # 实例化数据集类
     dataset_generator = SingleVideoDataset(opt)
-    opt.get_fps_index()
     # 打印数据条数
-    print(dataset_generator[0])
+    print(dataset_generator[500][0].shape, dataset_generator[500][1].shape)

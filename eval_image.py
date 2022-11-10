@@ -15,6 +15,7 @@ from mindspore.dataset import GeneratorDataset
 
 import utils
 from utils import progress_bar, logger
+from sinFID import calculate_SIFID
 import tools.pt2ms as pt2ms
 from modules import networks_2d
 from datasets.image import SingleImageDataset
@@ -77,22 +78,24 @@ def eval(opt, netG):
         np.save(f, random_samples.asnumpy())
     epoch_iterator.close()
 
+    return random_samples
+
 
 if __name__ == '__main__':
-    context.set_context(mode=1, device_id=5)
+    context.set_context(mode=1, device_id=2)
 
     # Argument Parser
     parser = argparse.ArgumentParser()
-    parser.add_argument('--exp-dir', required=True, help="Experiment directory")
+    parser.add_argument('--exp-dir', type=str, required=True, help="Experiment directory")
+    parser.add_argument('--netG', type=str, default='netG.ckpt', help="path to netG (to continue training)")
+    parser.add_argument('--save-path', type=str, default='images', help="New directory for outputs")
+
     parser.add_argument('--num-samples', type=int, default=10, help='number of samples to generate')
-    parser.add_argument('--netG', default='netG.ckpt', help="path to netG (to continue training)")
     parser.add_argument('--niter', type=int, default=1, help='number of epochs')
     parser.add_argument('--batch-size', type=int, default=1)
     parser.add_argument('--data-rep', type=int, default=1, help='data repetition')
     parser.add_argument('--scale-idx', type=int, default=-1, help='current scale idx (=len of body)')
-    # Extract images
     parser.add_argument('--max-samples', type=int, default=4, help="Maximum number of samples")
-    parser.add_argument('--save-path', default='images', help="New directory to be created for outputs")
 
     parser.set_defaults(hflip=False)
     opt = parser.parse_args()
@@ -172,6 +175,15 @@ if __name__ == '__main__':
         mindspore.load_param_into_net(netG, checkpoint)
 
         ## Eval
-        eval(opt, netG)
+        random_samples = eval(opt, netG)
         opt.experiments = sorted(glob(opt.exp_dir))
         utils.generate_images(opt)
+
+        # SIFID
+        real_dir = os.path.join(*opt.dataset.image_path.split("/")[:-1])
+        fake_dir = os.path.join(opt.saver.eval_dir, opt.save_path)
+        print(real_dir)
+        print(fake_dir)
+        sifid = calculate_SIFID(real_dir, fake_dir)
+        logging.logbook(f'SIFID: {sifid}')
+        print(f'SIFID: {sifid}')

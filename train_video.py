@@ -127,7 +127,6 @@ def train(opt, netG):
     #############
     ### TRAIN ###
     #############
-    total_loss = 0
     iterator = iter(opt.data_loader)
 
     for iteration in epoch_iterator:
@@ -174,7 +173,6 @@ def train(opt, netG):
             curD_loss = D_train(real, noise_init, opt.Noise_Amps)
             # (3) Update generator: maximize D(G(z)) (After grad clipping)
             curG_loss = G_train(real, real_zero, noise_init, opt.Noise_Amps, False)
-        total_loss += curG_loss
 
 
         ## Verbose
@@ -222,13 +220,13 @@ def train(opt, netG):
 
     ## Save data
     opt.saver.save_json({'noise_amps': opt.Noise_Amps, 'scale_idx': opt.scale_idx}, 'intermediate.json')
-    opt.saver.save_checkpoint(G_curr, 'netG.ckpt')
+    opt.saver.save_checkpoint(G_curr, f'netG_{opt.scale_idx}.ckpt')
     if opt.vae_levels < opt.scale_idx + 1:
         opt.saver.save_checkpoint(D_curr, f'netD_{opt.scale_idx}.ckpt')
 
 
 if __name__ == '__main__':
-    context.set_context(mode=1, device_id=5)
+    context.set_context(mode=1, device_id=2)
 
     ## Parser
     parser = argparse.ArgumentParser()
