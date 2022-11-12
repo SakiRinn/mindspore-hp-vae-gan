@@ -3,8 +3,8 @@ import mindspore.ops as ops
 import mindspore_hub as mshub
 
 
-class InceptionV3(nn.Cell):
-    """Pretrained InceptionV3 network returning feature maps"""
+class C3D(nn.Cell):
+    """Pretrained C3D network returning feature maps"""
 
     # Index of default block of inception to return,
     # corresponds to output of final average pooling
@@ -12,10 +12,10 @@ class InceptionV3(nn.Cell):
 
     # Maps feature dimensionality to their output blocks indices
     BLOCK_INDEX_BY_DIM = {
-        64: 0,   # First max pooling features
-        192: 1,  # Second max pooling featurs
-        768: 2,  # Pre-aux classifier features
-        2048: 3  # Final average pooling features
+        64: 0,
+        128: 1,
+        256: 2,
+        512: 3
     }
 
     def __init__(self,
@@ -44,67 +44,62 @@ class InceptionV3(nn.Cell):
         is_training : bool
             If true, use train mode.
         """
-        super(InceptionV3, self).__init__()
+        super(C3D, self).__init__()
 
         self.resize_input = resize_input
         self.normalize_input = normalize_input
         self.output_blocks = sorted(output_blocks)
         self.last_needed_block = max(output_blocks)
 
-        assert self.last_needed_block <= 3, \
-            'Last possible output block index is 3'
+        assert self.last_needed_block <= 4, \
+            'Last possible output block index is 4'
 
         self.blocks = nn.CellList([])
 
         model = "mindspore/1.9/inceptionv3_imagenet2012"
-        inception = mshub.load(model, num_classes=1000)
+        c3d = mshub.load(model, num_classes=1000)
 
-        # Block 0: input to maxpool1
         block0 = nn.SequentialCell([
-            inception.Conv2d_1a,
-            inception.Conv2d_2a,
-            inception.Conv2d_2b,
+            c3d.conv1,
             ])
         self.blocks.append(block0)
 
-        # Block 1: maxpool1 to maxpool2
         if self.last_needed_block >= 1:
             block1 = nn.SequentialCell([
-                nn.MaxPool2d(kernel_size=3, stride=2),
-                inception.Conv2d_3b,
-                inception.Conv2d_4a,
+                c3d.pool1,
+                c3d.conv2,
             ])
             self.blocks.append(block1)
 
-        # Block 2: maxpool2 to aux classifier
         if self.last_needed_block >= 2:
             block2 = nn.SequentialCell([
-                nn.MaxPool2d(kernel_size=3, stride=2),
-                inception.Mixed_5b,
-                inception.Mixed_5c,
-                inception.Mixed_5d,
-                inception.Mixed_6a,
-                inception.Mixed_6b,
-                inception.Mixed_6c,
-                inception.Mixed_6d,
-                inception.Mixed_6e,
+                c3d.pool2,
+                c3d.conv3a,
+                c3d.conv3b,
             ])
             self.blocks.append(block2)
 
-        # Block 3: aux classifier to final avgpool
         if self.last_needed_block >= 3:
             block3 = nn.SequentialCell([
-                inception.Mixed_7a,
-                inception.Mixed_7b,
-                inception.Mixed_7c,
+                c3d.pool3,
+                c3d.conv4a,
+                c3d.conv4b,
             ])
             self.blocks.append(block3)
 
         if self.last_needed_block >= 4:
             block4 = nn.SequentialCell([
-                nn.AdaptiveAvgPool2d(output_size=(1, 1))
+                c3d.pool4,
+                c3d.conv5a,
+                c3d.conv5b,
             ])
             self.blocks.append(block4)
+
+        if self.last_needed_block >= 5:
+            block5 = nn.SequentialCell([
+                c3d.pool5,
+            ])
+            self.blocks.append(block5)
 
         self.set_train(is_training)
 
@@ -132,6 +127,11 @@ class InceptionV3(nn.Cell):
             x = 2 * x - 1  # Scale from range (0, 1) to range (-1, 1)
 
         for idx, block in enumerate(self.blocks):
+            if idx == 5:
+                x = x.view(-1, 512 * 2, 7, 7)
+                x = self.pad(x)
+                x = x.view(-1, 512, 2, 8, 8)
+
             x = block(x)
             if idx in self.output_blocks:
                 outp.append(x)

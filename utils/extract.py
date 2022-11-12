@@ -2,6 +2,7 @@ import os
 import imageio
 import moviepy.editor as mpy
 import numpy as np
+from cv2 import vconcat
 
 import mindspore
 from mindspore import Tensor
@@ -56,24 +57,20 @@ def generate_gifs(opt):
 
         # Make grid
         real_transpose = ops.Transpose()(Tensor(real_sample), (0, 3, 1, 2))[::2]  # TxCxHxW
-        grid_image = ops.Transpose()(make_grid(real_transpose, real_transpose.shape[0]), (1, 2, 0))
-        imageio.imwrite(os.path.join(exp_dir, opt.save_path, 'real_unfold.png'),
-                        grid_image.data.numpy())
+        grid_image = vconcat(real_transpose).transpose(1, 2, 0)
+        imageio.imwrite(os.path.join(exp_dir, opt.save_path, 'real_unfold.png'), grid_image)
 
         fake = (random_samples.data.cpu().numpy() * 255).astype(np.uint8)
         fake_transpose = Tensor(fake).permute(0, 1, 4, 2, 3)[:, ::2]  # BxTxCxHxW
         fake_reshaped = fake_transpose.flatten(0, 1)  # (B+T)xCxHxW
-        grid_image = ops.Transpose()(make_grid(fake_reshaped[:10 * fake_transpose.shape[1], :, :, :],
-                                         fake_transpose.shape[1]
-                                        ), (1, 2, 0))
-        imageio.imwrite(os.path.join(exp_dir, opt.save_path, 'fake_unfold.png'),
-                        grid_image.data.numpy())
+        grid_image = vconcat(fake_reshaped.asnumpy()[:10 * fake_transpose.shape[1]]).transpose(1, 2, 0)
+        imageio.imwrite(os.path.join(exp_dir, opt.save_path, 'fake_unfold.png'), grid_image)
 
         white_space = Tensor(shape=random_samples.shape, init=One(), dtype=mstype.float32)[:, :, :, :10] * 255
 
-        random_samples = random_samples.data.cpu().numpy()
+        random_samples = random_samples.asnumpy()
         random_samples = (random_samples * 255).astype(np.uint8)
-        white_space = white_space.data.cpu().numpy()
+        white_space = white_space.asnumpy()
         white_space = (white_space * 255).astype(np.uint8)
 
         concat_gif = []

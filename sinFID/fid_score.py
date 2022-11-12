@@ -30,7 +30,9 @@ from mindspore import Tensor
 from scipy import linalg
 from matplotlib.pyplot import imread
 from tqdm import tqdm
+
 from .inception import InceptionV3
+from .c3d import C3D
 
 
 def get_activations(files, model, batch_size=1, dims=64, verbose=False):
@@ -209,6 +211,37 @@ def calculate_SIFID(real_dir, fake_dir, batch_size=1, dims=64, suffix='png'):
     sifid_values = calculate_sifid_given_paths(real_dir, fake_dir, batch_size, dims, suffix)
     sifid_values = np.asarray(sifid_values, dtype=np.float32)
     return sifid_values.mean()
+
+
+def calculate_svfid_given_paths(path1, path2, batch_size, dims, suffix):
+    """Calculates the SVFID of two paths"""
+
+    block_idx = C3D.BLOCK_INDEX_BY_DIM[dims]
+
+    model = C3D([block_idx])
+
+    path1 = pathlib.Path(path1)
+    # files1 = sorted(list(path1.glob('*.%s' % suffix)))
+    files1 = sorted(list(path1.glob('*.jpg')))
+
+    path2 = pathlib.Path(path2)
+    files2 = sorted(list(path2.glob('*.%s' % suffix)))
+
+    fid_values = []
+    for i in range(len(files2)):
+        real = files1[i] if i < len(files1) else files1[len(files1)-1]
+        fake = files2[i]
+        m1, s1 = calculate_activation_statistics([real], model, batch_size, dims)
+        m2, s2 = calculate_activation_statistics([fake], model, batch_size, dims)
+        fid_values.append(calculate_frechet_distance(m1, s1, m2, s2))
+
+    return fid_values
+
+
+def calculate_SVFID(real_dir, fake_dir, batch_size=1, dims=64, suffix='png'):
+    svfid_values = calculate_svfid_given_paths(real_dir, fake_dir, batch_size, dims, suffix)
+    svfid_values = np.asarray(svfid_values, dtype=np.float32)
+    return svfid_values.mean()
 
 
 if __name__ == '__main__':

@@ -1,1 +1,1 @@
-from .sifid_score import calculate_SIFID
+from .fid_score import calculate_SIFID, calculate_SVFID

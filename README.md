@@ -28,6 +28,7 @@ ckpt
 python eval_image.py --num-samples 100 --exp-dir run/air_balloons/myimagetest/experiment_1/
 pth
 python eval_image.py --num-samples 100 --exp-dir run/air_balloons/myimagetest/experiment_3/ --netG netG_9.pth
+python eval_video.py --num-samples 100 --exp-dir run/air_balloons/myvideotest/experiment_0/ --netG netG_9.pth
 python extract_images.py --max-samples 4 --exp-dir run/air_balloons/myimagetest/experiment_0/eval/
 
 python train_video.py --video-path data/vids/air_balloons.mp4 --vae-levels 3 --checkname myvideotest --niter 5000

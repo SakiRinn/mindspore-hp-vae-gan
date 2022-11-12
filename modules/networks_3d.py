@@ -127,20 +127,20 @@ class Encode3DVAE_nb(nn.Cell):
             output_dim = out_dim
 
         self.features = FeatureExtractor(opt.nc_im, opt.nfc, opt.ker_size, opt.ker_size // 2, 1, num_blocks=num_blocks)
-        self.mu = ConvBlock3D(opt.nfc, output_dim, opt.ker_size, opt.ker_size // 2, 1, bn=False, act=None)
-        self.logvar = ConvBlock3D(opt.nfc, output_dim, opt.ker_size, opt.ker_size // 2, 1, bn=False, act=None)
-        self.bern = ConvBlock3D(opt.nfc, 1, opt.ker_size, opt.ker_size // 2, 1, bn=False, act=None)
+        self._mu = ConvBlock3D(opt.nfc, output_dim, opt.ker_size, opt.ker_size // 2, 1, bn=False, act=None)
+        self._logvar = ConvBlock3D(opt.nfc, output_dim, opt.ker_size, opt.ker_size // 2, 1, bn=False, act=None)
+        self._bern = ConvBlock3D(opt.nfc, 1, opt.ker_size, opt.ker_size // 2, 1, bn=False, act=None)
 
     def construct(self, x):
         reduce_mean = ops.ReduceMean(keep_dims=True)
 
         features = self.features(x)
-        bern = ops.Sigmoid()(self.bern(features))
+        bern = ops.Sigmoid()(self._bern(features))
         features = bern * features
-        mu = reduce_mean(self.mu(features), 2)     # nn.AdaptiveAvgPool3D(1)
+        mu = reduce_mean(self._mu(features), 2)     # nn.AdaptiveAvgPool3D(1)
         mu = reduce_mean(mu, 3)
         mu = reduce_mean(mu, 4)
-        logvar = reduce_mean(self.logvar(features), 2)     # nn.AdaptiveAvgPool3D(1)
+        logvar = reduce_mean(self._logvar(features), 2)     # nn.AdaptiveAvgPool3D(1)
         logvar = reduce_mean(logvar, 3)
         logvar = reduce_mean(logvar, 4)
 
@@ -158,14 +158,14 @@ class Encode3DVAE1x1(nn.Cell):
                 exit(1)
             output_dim = out_dim
 
-        self.features = FeatureExtractor(opt.nc_im, opt.nfc, 1, 0, 1, num_blocks=2)
-        self.mu = ConvBlock3D(opt.nfc, output_dim, 1, 0, 1, bn=False, act=None)
-        self.logvar = ConvBlock3D(opt.nfc, output_dim, 1, 0, 1, bn=False, act=None)
+        self._features = FeatureExtractor(opt.nc_im, opt.nfc, 1, 0, 1, num_blocks=2)
+        self._mu = ConvBlock3D(opt.nfc, output_dim, 1, 0, 1, bn=False, act=None)
+        self._logvar = ConvBlock3D(opt.nfc, output_dim, 1, 0, 1, bn=False, act=None)
 
     def construct(self, x):
-        features = self.features(x)
-        mu = self.mu(features)
-        logvar = self.logvar(features)
+        features = self._features(x)
+        mu = self._mu(features)
+        logvar = self._logvar(features)
 
         return mu, logvar
 
@@ -209,8 +209,10 @@ class WDiscriminatorBaselines(nn.Cell):
         self.head = ConvBlock3D(opt.nc_im, N, opt.ker_size,
                                 opt.padd_size, stride=1, bn=False, act='lrelu')
 
-        self.body = nn.SequentialCell([])
-        for _ in range(opt.num_layer):
+        # FIXME: Name BUG.
+        self.body = nn.SequentialCell([ConvBlock3DSN(N, N, opt.ker_size,
+                                       opt.ker_size // 2, stride=1, bn=True, act='lrelu')])
+        for _ in range(opt.num_layer - 1):
             self.body.append(ConvBlock3DSN(N, N, opt.ker_size,
                                            opt.ker_size // 2, stride=1, bn=True, act='lrelu'))
 
@@ -250,8 +252,12 @@ class GeneratorCSG(nn.Cell):
                     (opt.num_layer + 0, opt.num_layer + 0))
 
         self.head = ConvBlock3D(opt.nc_im, N, opt.ker_size, padding=0, stride=1)
-        self.body = nn.CellList([ConvBlock3D(N, N, opt.ker_size, padding=0, stride=1)
-                                 for _ in range(opt.num_layer)])
+
+        _first_stage = nn.SequentialCell([ConvBlock3D(N, N, opt.ker_size, padding=0, stride=1)])
+        for _ in range(opt.num_layer):
+            _first_stage.append(ConvBlock3D(N, N, opt.ker_size, padding=0, stride=1))
+        self.body = nn.CellList([_first_stage])
+
         self.tail = nn.SequentialCell([
             nn.Conv3d(N, opt.nc_im, kernel_size=opt.ker_size, padding=0, stride=1,
                       weight_init=Normal(0.02, 0.0), pad_mode='pad', has_bias=True),
