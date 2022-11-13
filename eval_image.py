@@ -182,8 +182,6 @@ if __name__ == '__main__':
         # SIFID
         real_dir = os.path.join(*opt.dataset.image_path.split("/")[:-1])
         fake_dir = os.path.join(opt.saver.eval_dir, opt.save_path)
-        print(real_dir)
-        print(fake_dir)
         sifid = calculate_SIFID(real_dir, fake_dir)
-        logging.logbook(f'SIFID: {sifid}')
-        print(f'SIFID: {sifid}')
+        logging.info(f'SVFID: {sifid}')
+        print(f'SVFID: {sifid}')

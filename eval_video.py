@@ -15,6 +15,7 @@ from mindspore.dataset import GeneratorDataset
 import mindspore.context as context
 
 import tools.pt2ms as pt2ms
+from sinFID import calculate_SVFID
 from modules import networks_3d
 from datasets import SingleVideoDataset
 from utils import progress_bar, logger
@@ -97,7 +98,7 @@ def eval(opt, netG):
 
 
 if __name__ == '__main__':
-    context.set_context(mode=1, device_id=2)
+    context.set_context(mode=1, device_id=1)
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--exp-dir', type=str, required=True, help="Experiment directory")
@@ -187,6 +188,14 @@ if __name__ == '__main__':
             netG.init_next_stage()
         mindspore.load_param_into_net(netG, checkpoint)
 
-        eval(opt, netG)
+        ## Eval
+        # eval(opt, netG)
         opt.experiments = sorted(glob(opt.exp_dir))
         utils.generate_gifs(opt)
+
+        ## SVFID
+        real_dir = os.path.join(*opt.dataset.video_path.split("/")[:-1])
+        fake_dir = os.path.join(opt.saver.eval_dir, opt.save_path)
+        svfid = calculate_SVFID(real_dir, fake_dir)
+        logging.info(f'SVFID: {svfid}')
+        print(f'SVFID: {svfid}')
