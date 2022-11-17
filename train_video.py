@@ -1,22 +1,22 @@
-import argparse
-import utils
-import random
 import os
+import argparse
+import random
 import colorama
 import logging
-
-from utils import logger, progress_bar
-from modules import networks_3d
-from modules.losses import DWithLoss, GWithLoss
-from modules.optimizers import ClippedAdam
-from datasets import SingleVideoDataset
-import tools.pt2ms as pt2ms
 
 from mindspore import context, Tensor
 import mindspore
 import mindspore.nn as nn
 import mindspore.ops as ops
 from mindspore.dataset import GeneratorDataset
+
+import utils
+from utils import logger, progress_bar
+from modules import networks_3d
+from modules.losses import DWithLoss, GWithLoss
+from modules.optimizers import ClippedAdam
+from datasets import SingleVideoDataset
+import tools.pt2ms as pt2ms
 
 
 def train(opt, netG):

@@ -1,9 +1,6 @@
-import argparse
-import utils
-import random
 import os
-
-from utils import logger
+import argparse
+import random
 import logging
 import colorama
 
@@ -13,11 +10,11 @@ from mindspore import context
 import mindspore.ops as ops
 from mindspore.dataset import GeneratorDataset
 
-from modules import networks_3d
 import utils
+from modules import networks_3d
 from datasets import SingleVideoDataset
 from modules.losses import DWithLoss, GWithLoss
-from utils import progress_bar
+from utils import logger, progress_bar
 import tools.pt2ms as pt2ms
 
 

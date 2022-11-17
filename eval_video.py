@@ -1,6 +1,5 @@
-import argparse
-import utils
 import os
+import argparse
 from glob import glob
 import ast
 import numpy as np
@@ -13,16 +12,12 @@ import mindspore
 import mindspore.ops as ops
 import mindspore.context as context
 
+import utils
 import tools.pt2ms as pt2ms
 from sinFID import calculate_SVFID
 from modules import networks_3d
 from datasets import SingleVideoDataset
 from utils import progress_bar, logger
-
-clear = colorama.Style.RESET_ALL
-blue = colorama.Fore.CYAN + colorama.Style.BRIGHT
-green = colorama.Fore.GREEN + colorama.Style.BRIGHT
-magenta = colorama.Fore.MAGENTA + colorama.Style.BRIGHT
 
 
 def eval(opt, netG):
@@ -107,6 +102,11 @@ if __name__ == '__main__':
 
     parser.set_defaults(hflip=False)
     opt = parser.parse_args()
+
+    clear = colorama.Style.RESET_ALL
+    blue = colorama.Fore.CYAN + colorama.Style.BRIGHT
+    green = colorama.Fore.GREEN + colorama.Style.BRIGHT
+    magenta = colorama.Fore.MAGENTA + colorama.Style.BRIGHT
 
     exceptions = ['niter', 'data_rep', 'batch_size', 'netG', 'scale_idx']
     all_dirs = glob(opt.exp_dir)

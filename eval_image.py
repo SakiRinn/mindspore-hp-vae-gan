@@ -1,5 +1,5 @@
-import argparse
 import os
+import argparse
 from glob import glob
 import ast
 import colorama
@@ -19,11 +19,6 @@ from sinFID import calculate_SIFID
 import tools.pt2ms as pt2ms
 from modules import networks_2d
 from datasets.image import SingleImageDataset
-
-clear = colorama.Style.RESET_ALL
-blue = colorama.Fore.CYAN + colorama.Style.BRIGHT
-green = colorama.Fore.GREEN + colorama.Style.BRIGHT
-magenta = colorama.Fore.MAGENTA + colorama.Style.BRIGHT
 
 
 def eval(opt, netG):
@@ -99,6 +94,11 @@ if __name__ == '__main__':
 
     parser.set_defaults(hflip=False)
     opt = parser.parse_args()
+
+    clear = colorama.Style.RESET_ALL
+    blue = colorama.Fore.CYAN + colorama.Style.BRIGHT
+    green = colorama.Fore.GREEN + colorama.Style.BRIGHT
+    magenta = colorama.Fore.MAGENTA + colorama.Style.BRIGHT
 
     exceptions = ['niter', 'data_rep', 'batch_size', 'netG', 'scale_idx']
     all_dirs = glob(opt.exp_dir)
