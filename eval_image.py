@@ -180,7 +180,8 @@ if __name__ == '__main__':
         utils.generate_images(opt)
 
         # SIFID
-        real_dir = os.path.join(*opt.dataset.image_path.split("/")[:-1])
+        real_dir = os.path.join(*opt.dataset.image_path.split('/')[:-1]) if opt.dataset.image_path[0] != '/' \
+                   else '/' + os.path.join(*opt.dataset.image_path.split('/')[:-1])
         fake_dir = os.path.join(opt.saver.eval_dir, opt.save_path)
         sifid = calculate_SIFID(real_dir, fake_dir)
         logging.info(f'SVFID: {sifid}')

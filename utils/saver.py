@@ -52,12 +52,14 @@ class DataSaver:
 
         self.iteration = 0
 
-    def save_checkpoint(self, cell, filename='checkpoint.ckpt'):
+    def save_checkpoint(self, cell, filename):
         filename = os.path.join(self.experiment_dir, filename)
         mindspore.save_checkpoint(cell, filename)
 
-    def load_checkpoint(self, filename):
-        filename = os.path.join(self.experiment_dir, filename)
+    def load_checkpoint(self, filename, path=None):
+        if path is None:
+            path = self.experiment_dir
+        filename = os.path.join(path, filename)
         return mindspore.load_checkpoint(filename)
 
     def save_json(self, obj, filename):
@@ -65,8 +67,10 @@ class DataSaver:
         with open(filename,'w+') as f:
             json.dump(obj, f)
 
-    def load_json(self, filename):
-        filename = os.path.join(self.experiment_dir, filename)
+    def load_json(self, filename, path=None):
+        if path is None:
+            path = self.experiment_dir
+        filename = os.path.join(path, filename)
         with open(filename,'r+') as f:
             obj = json.load(f)
         return obj

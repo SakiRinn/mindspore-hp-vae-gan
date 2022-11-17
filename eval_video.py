@@ -185,7 +185,8 @@ if __name__ == '__main__':
         utils.generate_gifs(opt)
 
         ## SVFID
-        real_dir = os.path.join(*opt.dataset.video_path.split("/")[:-1])
+        real_dir = os.path.join(*opt.dataset.video_path.split('/')[:-1]) if opt.dataset.video_path[0] != '/' \
+                   else '/' + os.path.join(*opt.dataset.video_path.split('/')[:-1])
         fake_dir = os.path.join(opt.saver.eval_dir, opt.save_path)
         svfid = calculate_SVFID(real_dir, fake_dir)
         logging.info(f'SVFID: {svfid}')

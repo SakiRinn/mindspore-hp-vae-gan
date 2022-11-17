@@ -205,6 +205,7 @@ if __name__ == '__main__':
     # Load, input, save configurations
     parser.add_argument('--netG', default='', help='path to netG (to continue training)')
     parser.add_argument('--netD', default='', help='path to netD (to continue training)')
+    parser.add_argument('--intermediate', default='', help='path to intermediate file')
     parser.add_argument('--manualSeed', type=int, help='manual seed')
 
     # Networks hyper parameters
@@ -338,11 +339,16 @@ if __name__ == '__main__':
     netG = getattr(networks_3d, opt.generator)(opt).to(opt.device)
 
     if opt.netG != '':
+        opt.intermediate = os.path.join(*opt.intermediate.split('/')[:-1]) if opt.intermediate[0] != '/' \
+                           else '/' + os.path.join(*opt.intermediate.split('/')[:-1])
+        if opt.intermediate == '':
+            raise FileNotFoundError("intermediate file DOESN'T be empty.")
         # Init
-        opt.Noise_Amps = opt.saver.load_json('intermediate.json')['noise_amps']
-        opt.scale_idx = opt.saver.load_json('intermediate.json')['scale']
-        opt.resumed_idx = opt.saver.load_json('intermediate.json')['scale']
-        opt.resume_dir = '/'.join(opt.netG.split('/')[:-1])
+        opt.Noise_Amps = opt.saver.load_json('intermediate.json', path=opt.intermediate)['noise_amps']
+        opt.scale_idx = opt.saver.load_json('intermediate.json', path=opt.intermediate)['scale']
+        opt.resumed_idx = opt.saver.load_json('intermediate.json', path=opt.intermediate)['scale']
+        opt.resume_dir = os.path.join(*opt.netG.split('/')[:-1]) if opt.netG[0] != '/' \
+                         else '/' + os.path.join(*opt.netG.split('/')[:-1])
         # Load
         if not os.path.isfile(opt.netG):
             raise RuntimeError(f"=> no <G> checkpoint found at '{opt.netG}'")
