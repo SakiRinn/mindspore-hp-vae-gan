@@ -11,7 +11,6 @@ import json
 import torch
 import mindspore
 import mindspore.ops as ops
-from mindspore.dataset import GeneratorDataset
 import mindspore.context as context
 
 import tools.pt2ms as pt2ms
@@ -55,15 +54,9 @@ def eval(opt, netG):
         "postfix": True
     }
     epoch_iterator = progress_bar.create_progressbar(**progressbar_args)
-    iterator = iter(data_loader)
 
     random_samples = []
     for iteration in epoch_iterator:
-        try:
-            data = next(iterator)
-        except StopIteration:
-            iterator = iter(opt.data_loader)
-            data = next(iterator)
 
         noise_init = utils.generate_noise_size(opt.Z_init_size)
 
@@ -160,8 +153,6 @@ if __name__ == '__main__':
 
         # Dataset
         opt.dataset = SingleVideoDataset(opt)
-        data_loader = GeneratorDataset(opt.dataset, ['data', 'zero-scale data'], shuffle=True)
-        opt.data_loader = data_loader.batch(opt.batch_size)
 
         # Load
         if not os.path.isfile(opt.netG):
@@ -171,10 +162,10 @@ if __name__ == '__main__':
             intermediate = pt2ms.load_intermediate(checkpoint)
             with open(os.path.join(opt.exp_dir, 'intermediate.json'), 'w') as f:
                 json.dump(intermediate, f, indent=4)
-            checkpoint = pt2ms.p2m_HPVAEGAN_2d(checkpoint)
+            checkpoint = pt2ms.p2m_HPVAEGAN_3d(checkpoint)
         elif opt.netG.endswith('.ckpt'):
             checkpoint = mindspore.load_checkpoint(opt.netG)
-            checkpoint = pt2ms.m2m_HPVAEGAN_2d(checkpoint)
+            checkpoint = pt2ms.m2m_HPVAEGAN_3d(checkpoint)
 
         # Init
         if opt.scale_idx == -1:

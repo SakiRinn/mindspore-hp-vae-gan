@@ -104,7 +104,7 @@ def m2m_HPVAEGAN_2d(netG_pth) -> OrderedDict:
     return new_state
 
 
-def p2m_WDiscriminator_2d(netD_pth) -> OrderedDict:
+def p2m_WDiscriminator_3d(netD_pth) -> OrderedDict:
     netD_pth = netD_pth['state_dict']
     new_state = OrderedDict()
     for key, value in netD_pth.items():
@@ -126,7 +126,7 @@ def p2m_WDiscriminator_2d(netD_pth) -> OrderedDict:
     return new_state
 
 
-def p2m_HPVAEGAN_2d(netG_pth) -> OrderedDict:
+def p2m_HPVAEGAN_3d(netG_pth) -> OrderedDict:
     netG_pth = netG_pth['state_dict']
     new_state = OrderedDict()
     for key, value in netG_pth.items():

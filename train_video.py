@@ -10,6 +10,7 @@ from modules import networks_3d
 from modules.losses import DWithLoss, GWithLoss
 from modules.optimizers import ClippedAdam
 from datasets import SingleVideoDataset
+import tools.pt2ms as pt2ms
 
 from mindspore import context, Tensor
 import mindspore
@@ -50,14 +51,15 @@ def train(opt, netG):
     G_curr = netG
 
     if opt.vae_levels < opt.scale_idx + 1:
-        # Current discriminator
-        D_curr = getattr(networks_3d, opt.discriminator)(opt)
-
         # Load parameters for discriminator
         if (opt.netG != '') and (opt.resumed_idx == opt.scale_idx):
-            mindspore.load_checkpoint(f'{opt.resume_dir}/netD_{opt.scale_idx - 1}.ckpt', D_curr)
+            checkpoint = mindspore.load_checkpoint(f'{opt.resume_dir}/netD_{opt.scale_idx - 1}.ckpt')
+            checkpoint = pt2ms.m2m_WDiscriminator_3d(checkpoint)
+            mindspore.load_param_into_net(D_curr, checkpoint)
         elif opt.vae_levels < opt.scale_idx:
-            mindspore.load_checkpoint(f'{opt.saver.experiment_dir}/netD_{opt.scale_idx - 1}.ckpt', D_curr)
+            checkpoint = mindspore.load_checkpoint(f'{opt.saver.experiment_dir}/netD_{opt.scale_idx - 1}.ckpt')
+            checkpoint = pt2ms.m2m_WDiscriminator_3d(checkpoint)
+            mindspore.load_param_into_net(D_curr, checkpoint)
 
         # Optimizer
         optimizerD = nn.Adam(D_curr.trainable_params(), opt.lr_d, beta1=opt.beta1, beta2=0.999)
@@ -127,14 +129,14 @@ def train(opt, netG):
     #############
     ### TRAIN ###
     #############
-    iterator = iter(opt.data_loader)
+    iterator = opt.data_loader.create_tuple_iterator()
 
     for iteration in epoch_iterator:
         ## Initialize
         try:
             data = next(iterator)
         except StopIteration:
-            iterator = iter(opt.data_loader)
+            iterator = opt.data_loader.create_tuple_iterator()
             data = next(iterator)
 
         if opt.scale_idx > 0:
@@ -197,8 +199,8 @@ def train(opt, netG):
             opt.saver.save_image(real, f'real_{iteration+1}.jpg')
             # Generated
             return_list = G_curr(real_zero, opt.Noise_Amps, isRandom=False)
-            generated = return_list[0]
-            generated_vae = return_list[1]
+            generated = return_list[0] * 255
+            generated_vae = return_list[1] * 255
             opt.saver.save_image(generated, f'generated_{iteration+1}.jpg')
             opt.saver.save_image(generated_vae, f'generated_vae_{iteration+1}.jpg')
             # Fake
@@ -210,8 +212,8 @@ def train(opt, netG):
                 return_list = G_curr(noise_init, opt.Noise_Amps, noise_init=noise_init, isRandom=True)
                 fake_var.append(return_list[0])
                 fake_vae_var.append(return_list[1])
-            fake_var = ops.Concat()(fake_var)
-            fake_vae_var = ops.Concat()(fake_vae_var)
+            fake_var = ops.Concat()(fake_var) * 255
+            fake_vae_var = ops.Concat()(fake_vae_var) * 255
             opt.saver.save_image(fake_var, f'fake_var_{iteration}.jpg')
             opt.saver.save_image(fake_vae_var, f'fake_vae_var{iteration}.jpg')
 
@@ -286,7 +288,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch-size', type=int, default=1, help='batch size')
     parser.add_argument('--print-interval', type=int, default=10, help='print interval')
     parser.add_argument('--image-interval', type=int, default=100, help='image interval')
-    parser.add_argument('--visualize', action='store_true', default=False, help='visualize using tensorboard')
+    parser.add_argument('--visualize', action='store_true', default=False, help='visualize the image')
 
     parser.set_defaults(hflip=False)
     opt = parser.parse_args()
@@ -392,6 +394,7 @@ if __name__ == '__main__':
         if not os.path.isfile(opt.netG):
             raise RuntimeError(f"=> no <G> checkpoint found at '{opt.netG}'")
         checkpoint = mindspore.load_checkpoint(opt.netG)
+        checkpoint = pt2ms.m2m_HPVAEGAN_3d(checkpoint)
         for _ in range(opt.scale_idx):
             netG.init_next_stage()
         mindspore.load_param_into_net(netG, checkpoint)
