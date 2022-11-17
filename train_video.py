@@ -392,8 +392,8 @@ if __name__ == '__main__':
             raise FileNotFoundError("intermediate file DOESN'T be empty.")
         # Init
         opt.Noise_Amps = opt.saver.load_json('intermediate.json', path=opt.intermediate)['noise_amps']
-        opt.scale_idx = opt.saver.load_json('intermediate.json', path=opt.intermediate)['scale']
-        opt.resumed_idx = opt.saver.load_json('intermediate.json', path=opt.intermediate)['scale']
+        opt.scale_idx = opt.saver.load_json('intermediate.json', path=opt.intermediate)['scale_idx']
+        opt.resumed_idx = opt.saver.load_json('intermediate.json', path=opt.intermediate)['scale_idx']
         opt.resume_dir = os.path.join(*opt.netG.split('/')[:-1]) if opt.netG[0] != '/' \
                          else '/' + os.path.join(*opt.netG.split('/')[:-1])
         # Load
