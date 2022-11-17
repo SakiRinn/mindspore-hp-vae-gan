@@ -89,9 +89,9 @@ def p2m_HPVAEGAN_2d(netG_pth) -> OrderedDict:
     return new_state
 
 
-def m2m_HPVAEGAN_2d(netG_pth) -> OrderedDict:
+def m2m_HPVAEGAN_2d(netG_ckpt) -> OrderedDict:
     new_state = OrderedDict()
-    for key, value in netG_pth.items():
+    for key, value in netG_ckpt.items():
 
         ## Body
         if 'encode.' not in key and 'decoder.' not in key:
@@ -186,6 +186,10 @@ def p2m_HPVAEGAN_3d(netG_pth) -> OrderedDict:
             value = value.unsqueeze(-1)
         new_state[key] = Parameter(Tensor(value.numpy()).astype(mindspore.float32))
     return new_state
+
+
+def m2m_HPVAEGAN_3d(netG_ckpt):
+    ...
 
 
 def load_intermediate(netG_pth) -> OrderedDict:

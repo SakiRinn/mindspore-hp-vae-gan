@@ -33,11 +33,9 @@ def train(opt, netG):
         # Load parameters for discriminator
         if (opt.netG != '') and (opt.resumed_idx == opt.scale_idx):
             checkpoint = mindspore.load_checkpoint(f'{opt.resume_dir}/netD_{opt.scale_idx - 1}.ckpt')
-            checkpoint = pt2ms.m2m_WDiscriminator_2d(checkpoint)
             mindspore.load_param_into_net(D_curr, checkpoint)
         elif opt.vae_levels < opt.scale_idx:
             checkpoint = mindspore.load_checkpoint(f'{opt.saver.experiment_dir}/netD_{opt.scale_idx - 1}.ckpt')
-            checkpoint = pt2ms.m2m_WDiscriminator_2d(checkpoint)
             mindspore.load_param_into_net(D_curr, checkpoint)
 
         # Optimizer

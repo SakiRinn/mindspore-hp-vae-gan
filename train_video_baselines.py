@@ -51,7 +51,6 @@ def train(opt, netG):
     if opt.scale_idx > 0:
         # Current discriminator
         checkpoint = mindspore.load_checkpoint(f'{opt.resume_dir}/netD_{opt.scale_idx - 1}.ckpt')
-        checkpoint = pt2ms.m2m_WDiscriminator_3d(checkpoint)
         mindspore.load_param_into_net(D_curr, checkpoint)
 
     # Optimizer
