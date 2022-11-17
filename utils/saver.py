@@ -44,9 +44,11 @@ class DataSaver:
         if not os.path.exists(self.eval_dir):
             os.makedirs(self.eval_dir)
 
-        self.image_dir = os.path.join(self.experiment_dir, "img")
-        if not os.path.exists(self.image_dir):
-            os.makedirs(self.image_dir)
+        self.image_dir = None
+        if opt.visualize:
+            self.image_dir = os.path.join(self.experiment_dir, "img")
+            if not os.path.exists(self.image_dir):
+                os.makedirs(self.image_dir)
 
         self.iteration = 0
 
@@ -70,6 +72,8 @@ class DataSaver:
         return obj
 
     def save_image(self, img, filename):
+        if self.image_dir is None:
+            return
         filename = os.path.join(self.image_dir, filename)
         img = img.asnumpy().squeeze().astype(np.uint8)
         if img.ndim == 4 and img.shape[0] == 2:
