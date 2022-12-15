@@ -141,3 +141,13 @@ log.txt
 logbook.txt
 run
 .vscode
+*.ckpt
+nohup.out
+*.pth
+*.log
+inceptionv3*
+
+mindspore-hp-vae-gan
+src/train_image.py
+src/data
+ascend310_infer/out

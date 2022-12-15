@@ -8,7 +8,7 @@ import os
 import re
 import sys
 
-from utils import tools
+from . import progress_bar
 
 
 def get_default_logging_format(colorize=False, brackets=False):
@@ -72,11 +72,11 @@ def configure_logging(filename=None):
     sys.modules[__name__].global_indent = 0
 
     # add custom tqdm logger
-    tools.addLoggingLevel("LOGBOOK", 1000)
+    progress_bar.addLoggingLevel("LOGBOOK", 1000)
 
     # create logger
     root_logger = logging.getLogger("")
-    root_logger.setLevel(logging.DEBUG)
+    root_logger.setLevel(logging.INFO)
 
     # create console handler and set level to debug
     console = logging.StreamHandler()
@@ -108,7 +108,7 @@ def configure_logging(filename=None):
         # Configure handler that removes color codes from logbook
         # --------------------------------------------------------------------------------------
         logbook = logging.FileHandler(filename=filename, mode="a", encoding="utf-8")
-        logbook.setLevel(logging.DEBUG)
+        logbook.setLevel(logging.INFO)
         fmt = get_default_logging_format(colorize=False, brackets=True)
         logbook_formatter = LogbookFormatter(fmt=fmt, datefmt=datefmt)
         logbook.setFormatter(logbook_formatter)

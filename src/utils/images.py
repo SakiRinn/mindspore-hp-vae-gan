@@ -1,4 +1,3 @@
-from .trilinear import UpsampleTrilinear3D
 import math
 import numpy as np
 
@@ -8,6 +7,7 @@ from mindspore.ops import constexpr
 import mindspore.ops as ops
 from mindspore.common.initializer import Zero
 
+from ..tools import UpsampleTrilinear3D
 
 __all__ = ['interpolate', 'interpolate_3D', 'adjust_scales2image',
            'generate_noise_size', 'generate_noise_ref','get_scales_by_index',
@@ -51,9 +51,10 @@ def interpolate(input, size=None):
     return scaled
 
 
-def interpolate_3D(input, size=None):
+def interpolate_3D(input, size):
     if input.ndim != 5:
         exit(1)
+    size = tuple([int(v) for v in size])
     resize_trilinear = UpsampleTrilinear3D(size, align_corners=True)
     scaled = resize_trilinear(input)
 

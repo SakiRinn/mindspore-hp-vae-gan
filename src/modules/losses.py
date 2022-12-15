@@ -1,10 +1,5 @@
-from .networks_2d import GeneratorHPVAEGAN, WDiscriminator2D
-
 import mindspore.nn as nn
 import mindspore.ops as ops
-from mindspore import Tensor, Parameter
-from mindspore import dtype as mstype
-from mindspore.common.initializer import Normal, One
 
 
 def kl_criterion(mu, logvar):
@@ -26,13 +21,12 @@ class DWithLoss(nn.Cell):
         self._netD = netD
         self._netG = netG
 
-        self.scale_idx = opt.scale_idx
         self.lambda_grad = opt.lambda_grad
-        self.alpha = Tensor(shape=(1, 1), init=Normal(), dtype=mstype.float32)
+        self.alpha = ops.UniformReal()((1, 1))
 
     def construct(self, real, noise_init, noise_amps):
         # Fake
-        return_list = self._netG(noise_init, noise_amps, self.scale_idx, noise_init=noise_init, isRandom=True)
+        return_list = self._netG(noise_init, noise_amps, noise_init=noise_init, isRandom=True)
         fake = ops.stop_gradient(return_list[0])
 
         # Train with real
@@ -52,7 +46,7 @@ class DWithLoss(nn.Cell):
 
     def calc_gradient_penalty(self, real, fake, LAMBDA=1):
         alpha = ops.BroadcastTo(real.shape)(self.alpha)
-        interpolates = (alpha * real + ((1 - alpha) * fake))
+        interpolates = alpha * real + ((1 - alpha) * fake)
         gradients = ops.GradOperation()(self.backbone_network)(interpolates)
         gradient_penalty = ((ops.LpNorm(1, 2)(gradients) - 1) ** 2).mean() * LAMBDA
         return gradient_penalty
@@ -73,9 +67,10 @@ class GWithLoss(nn.Cell):
         self.kl_weight = opt.kl_weight
         self.disc_loss_weight = opt.disc_loss_weight
 
-    def construct(self, real, real_zero, scale_idx, noise_init, noise_amps, isVAE=False):
+    def construct(self, real, real_zero, noise_init, noise_amps, isVAE=False):
+        total_loss = 0
         # Forward
-        return_list = self.backbone_network(real_zero, noise_amps, scale_idx, isRandom=False)
+        return_list = self.backbone_network(real_zero, noise_amps, isRandom=False)
         generated = return_list[0]
         generated_vae = return_list[1]
         mu = return_list[2]
@@ -87,22 +82,25 @@ class GWithLoss(nn.Cell):
             kl_loss = kl_criterion(mu, logvar)
             vae_loss = self.rec_weight * rec_vae_loss + self.kl_weight * kl_loss
 
-            return vae_loss
+            total_loss += vae_loss
         else:
             ## (2) Generator loss
+            errG_total = 0
             rec_loss = self.rec_loss(generated, real)
             errG_total = self.rec_weight * rec_loss
 
             # Fake
-            return_list2 = self.backbone_network(noise_init, noise_amps, scale_idx, noise_init=noise_init, isRandom=True)
-            fake = ops.stop_gradient(return_list2[0])
+            return_list = self.backbone_network(noise_init, noise_amps, noise_init=noise_init, isRandom=True)
+            fake = ops.stop_gradient(return_list[0])
 
             # Train with Discriminator
             output = self._netD(fake)
             errG = -output.mean() * self.disc_loss_weight
             errG_total += errG
 
-            return errG_total
+            total_loss += errG_total
+
+        return total_loss
 
     @property
     def backbone_network(self):
@@ -110,6 +108,8 @@ class GWithLoss(nn.Cell):
 
 
 if __name__ == '__main__':
+    from mindspore import context
+    context.set_context(mode=0, device_id=5)
     class Opt:
         def __init__(self):
             self.nfc = 64
@@ -127,20 +127,8 @@ if __name__ == '__main__':
             self.scale_idx = 0
             self.vae_levels = 3
             self.Noise_Amps = [1]
-            self.rec_loss = nn.RMSELoss()
+            self.rec_loss = nn.MSELoss()
             self.rec_weight = 10.0
 
     opt = Opt()
-    netD = WDiscriminator2D(opt)
-    netG = GeneratorHPVAEGAN(opt)
-    Gloss = GWithLoss(opt, netD, netG)
-
-    normal = ops.StandardNormal()
-    real_zero = normal((1, 3, 24, 33))
-    real = normal((1, 3, 24, 33))
-    noise_init = normal((2, 128, 24, 33))
-
-    generated, generated_vae, (mu, logvar) = netG(real_zero, opt.Noise_Amps, randMode=False)
-    fake, _ = netG(noise_init, opt.Noise_Amps, noise_init=noise_init, randMode=True)
-    result = Gloss(real, real_zero, fake, generated, generated_vae, mu, logvar)
-    print(result)
+    print(ops.UniformReal()((1, 1)))

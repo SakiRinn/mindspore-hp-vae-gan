@@ -1,21 +1,22 @@
-import argparse
-import utils
-import random
 import os
+import argparse
+import random
 import colorama
 import logging
-
-from utils import logger, tools
-from modules import networks_2d
-from modules.losses import DWithLoss, GWithLoss
-from modules.optimizers import ClippedAdam
-from datasets import SingleImageDataset
 
 from mindspore import context, Tensor
 import mindspore
 import mindspore.nn as nn
 import mindspore.ops as ops
 from mindspore.dataset import GeneratorDataset
+
+import src.utils as utils
+from src.utils import progress_bar, logger
+from src.modules import networks_2d
+from src.modules.losses import DWithLoss, GWithLoss
+from src.modules.optimizers import ClippedAdam
+from src.datasets import SingleImageDataset
+import src.tools.pt2ms as pt2ms
 
 
 def train(opt, netG):
@@ -25,16 +26,17 @@ def train(opt, netG):
     # profiler = mindspore.Profiler()
 
     ## Current Networks
-    assert hasattr(networks_2d, opt.discriminator)
     D_curr = getattr(networks_2d, opt.discriminator)(opt)
     G_curr = netG
 
     if opt.vae_levels < opt.scale_idx + 1:
         # Load parameters for discriminator
         if (opt.netG != '') and (opt.resumed_idx == opt.scale_idx):
-            mindspore.load_checkpoint(f'{opt.resume_dir}/netD_{opt.scale_idx - 1}.ckpt', D_curr)
+            checkpoint = mindspore.load_checkpoint(f'{opt.resume_dir}/netD_{opt.scale_idx - 1}.ckpt')
+            mindspore.load_param_into_net(D_curr, checkpoint)
         elif opt.vae_levels < opt.scale_idx:
-            mindspore.load_checkpoint(f'{opt.saver.experiment_dir}/netD_{opt.scale_idx - 1}.ckpt', D_curr)
+            checkpoint = mindspore.load_checkpoint(f'{opt.saver.experiment_dir}/netD_{opt.scale_idx - 1}.ckpt')
+            mindspore.load_param_into_net(D_curr, checkpoint)
 
         # Optimizer
         optimizerD = nn.Adam(D_curr.trainable_params(), opt.lr_d, beta1=opt.beta1, beta2=0.999)
@@ -99,21 +101,20 @@ def train(opt, netG):
         "logging_on_close": True,
         "postfix": True
     }
-    epoch_iterator = tools.create_progressbar(**progressbar_args)
+    epoch_iterator = progress_bar.create_progressbar(**progressbar_args)
 
 
     #############
     ### TRAIN ###
     #############
-    total_loss = 0
-    iterator = iter(opt.data_loader)
+    iterator = opt.data_loader.create_tuple_iterator()
 
     for iteration in epoch_iterator:
         ## Initialize
         try:
             data = next(iterator)
         except StopIteration:
-            iterator = iter(opt.data_loader)
+            iterator = opt.data_loader.create_tuple_iterator()
             data = next(iterator)
 
         if opt.scale_idx > 0:
@@ -139,7 +140,7 @@ def train(opt, netG):
                     opt.Noise_Amps.append(opt.noise_amp)
                 else:
                     opt.Noise_Amps.append(0)
-                    return_list = G_curr(real_zero, opt.Noise_Amps, opt.scale_idx, isRandom=False)
+                    return_list = G_curr(real_zero, opt.Noise_Amps, isRandom=False)
                     z_reconstruction = return_list[0]
                     RMSE = nn.RMSELoss()(real, z_reconstruction)
 
@@ -150,27 +151,28 @@ def train(opt, netG):
         ## Train
         if opt.vae_levels >= opt.scale_idx + 1:
             # (1) Update VAE network
-            curG_loss = G_train(real, real_zero, opt.scale_idx, noise_init, opt.Noise_Amps, True)
+            curG_loss = G_train(real, real_zero, noise_init, opt.Noise_Amps, True)
         else:
             # (2) Update distriminator: maximize D(x) + D(G(z))
             curD_loss = D_train(real, noise_init, opt.Noise_Amps)
             # (3) Update generator: maximize D(G(z)) (After grad clipping)
-            curG_loss = G_train(real, real_zero, opt.scale_idx , noise_init, opt.Noise_Amps, False)
-        total_loss += curG_loss
+            curG_loss = G_train(real, real_zero, noise_init, opt.Noise_Amps, False)
 
 
         ## Verbose
         # Update progress bar
         epoch_iterator.set_description('Scale [{}/{}], Iteration [{}/{}]'.format(
-            opt.scale_idx + 1, opt.stop_scale + 1,iteration + 1, opt.niter))
+            opt.scale_idx + 1, opt.stop_scale + 1,
+            iteration + 1, opt.niter,
+        ))
 
         # Print
         if (iteration + 1) % opt.print_interval == 0:
             if opt.vae_levels >= opt.scale_idx + 1:
-                logging.debug('[Scale {}/Iter {}] Noise amp: {}, Gloss: {}'.format(
+                logging.logbook('[Scale {}/Iter {}] Noise amp: {}, Gloss: {}'.format(
                     opt.scale_idx + 1, iteration + 1, opt.noise_amp, curG_loss))
             else:
-                logging.debug('[Scale {}/Iter {}] Noise amp: {}, Gloss: {}, Dloss: {}'.format(
+                logging.logbook('[Scale {}/Iter {}] Noise amp: {}, Gloss: {}, Dloss: {}'.format(
                     opt.scale_idx + 1, iteration + 1, opt.noise_amp, curG_loss, curD_loss))
 
         # Visualize
@@ -179,8 +181,8 @@ def train(opt, netG):
             opt.saver.save_image(real, f'real_{iteration+1}.jpg')
             # Generated
             return_list = G_curr(real_zero, opt.Noise_Amps, isRandom=False)
-            generated = return_list[0]
-            generated_vae = return_list[1]
+            generated = return_list[0] * 255
+            generated_vae = return_list[1] * 255
             opt.saver.save_image(generated, f'generated_{iteration+1}.jpg')
             opt.saver.save_image(generated_vae, f'generated_vae_{iteration+1}.jpg')
             # Fake
@@ -192,8 +194,8 @@ def train(opt, netG):
                 return_list = G_curr(noise_init, opt.Noise_Amps, noise_init=noise_init, isRandom=True)
                 fake_var.append(return_list[0])
                 fake_vae_var.append(return_list[1])
-            fake_var = ops.Concat()(fake_var)
-            fake_vae_var = ops.Concat()(fake_vae_var)
+            fake_var = ops.Concat()(fake_var) * 255
+            fake_vae_var = ops.Concat()(fake_vae_var) * 255
             opt.saver.save_image(fake_var, f'fake_var_{iteration}.jpg')
             opt.saver.save_image(fake_vae_var, f'fake_vae_var{iteration}.jpg')
 
@@ -203,20 +205,20 @@ def train(opt, netG):
 
     ## Save data
     opt.saver.save_json({'noise_amps': opt.Noise_Amps, 'scale_idx': opt.scale_idx}, 'intermediate.json')
-    opt.saver.save_checkpoint(G_curr, 'netG.ckpt')
+    opt.saver.save_checkpoint(G_curr, f'netG_{opt.scale_idx}.ckpt')
     if opt.vae_levels < opt.scale_idx + 1:
         opt.saver.save_checkpoint(D_curr, f'netD_{opt.scale_idx}.ckpt')
 
 
 if __name__ == '__main__':
-    context.set_context(mode=1, device_id=5)
-
     ## Parser
     parser = argparse.ArgumentParser()
+    parser.add_argument('--device-id', default=0, type=int, help='Device ID')
 
     # Load, input, save configurations
     parser.add_argument('--netG', default='', help='path to netG (to continue training)')
     parser.add_argument('--netD', default='', help='path to netD (to continue training)')
+    parser.add_argument('--intermediate', default='', help='path to intermediate file')
     parser.add_argument('--manualSeed', type=int, help='manual seed')
 
     # Networks hyper parameters
@@ -265,11 +267,13 @@ if __name__ == '__main__':
     parser.add_argument('--mode', default='train', help='task to be done')
     parser.add_argument('--print-interval', type=int, default=10, help='print interval')
     parser.add_argument('--image-interval', type=int, default=100, help='image interval')
-    parser.add_argument('--batch-size', type=int, default=2, help='batch size')
-    parser.add_argument('--visualize', action='store_true', default=False, help='visualize using tensorboard')
+    parser.add_argument('--batch-size', type=int, default=1, help='batch size')
+    parser.add_argument('--visualize', action='store_true', default=False, help='visualize the image')
 
     parser.set_defaults(hflip=False)
     opt = parser.parse_args()
+
+    context.set_context(mode=1, device_id=opt.device_id)
 
     assert opt.vae_levels > 0
     assert opt.disc_loss_weight > 0
@@ -355,17 +359,23 @@ if __name__ == '__main__':
     netG = getattr(networks_2d, opt.generator)(opt)
 
     if opt.netG != '':
+        opt.intermediate = os.path.join(*opt.intermediate.split('/')[:-1]) if opt.intermediate[0] != '/' \
+                           else '/' + os.path.join(*opt.intermediate.split('/')[:-1])
+        if opt.intermediate == '':
+            raise FileNotFoundError("intermediate file DOESN'T be empty.")
         # Init
-        opt.saver.experiment_dir = '/'.join(opt.netG.split('/')[:-1])
-        opt.Noise_Amps = opt.saver.load_json('intermediate.json')['noise_amps']
-        opt.scale_idx = opt.saver.load_json('intermediate.json')['scale_idx']
-        opt.resumed_idx = opt.scale_idx
+        opt.Noise_Amps = opt.saver.load_json('intermediate.json', path=opt.intermediate)['noise_amps']
+        opt.scale_idx = opt.saver.load_json('intermediate.json', path=opt.intermediate)['scale_idx']
+        opt.resumed_idx = opt.saver.load_json('intermediate.json', path=opt.intermediate)['scale_idx']
+        opt.resume_dir = os.path.join(*opt.netG.split('/')[:-1]) if opt.netG[0] != '/' \
+                         else '/' + os.path.join(*opt.netG.split('/')[:-1])
         # Load
         if not os.path.isfile(opt.netG):
             raise RuntimeError(f"=> no <G> checkpoint found at '{opt.netG}'")
         checkpoint = mindspore.load_checkpoint(opt.netG)
-        # for _ in range(opt.scale_idx):
-        #     netG.init_next_stage()
+        checkpoint = pt2ms.m2m_HPVAEGAN_2d(checkpoint)
+        for _ in range(opt.scale_idx):
+            netG.init_next_stage()
         mindspore.load_param_into_net(netG, checkpoint)
     else:
         opt.resumed_idx = -1
@@ -373,13 +383,8 @@ if __name__ == '__main__':
 
     ## Train
     while opt.scale_idx < opt.stop_scale + 1:
-        # if (opt.scale_idx > 0) and (opt.resumed_idx != opt.scale_idx):
-            # netG.init_next_stage()
-        if (opt.scale_idx > 1) and (opt.scale_idx > opt.resumed_idx):
-            for new, old in zip(netG.body[opt.scale_idx - 1].parameters_dict().keys(),
-                                netG.body[opt.scale_idx - 2].parameters_dict().keys()):
-                ops.assign(netG.body[opt.scale_idx - 1].parameters_dict()[new],
-                           netG.body[opt.scale_idx - 2].parameters_dict()[old])    # assign前后不改变名字
+        if (opt.scale_idx > 0) and (opt.resumed_idx != opt.scale_idx):
+            netG.init_next_stage()
         train(opt, netG)
 
         # Increase scale

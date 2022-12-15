@@ -44,18 +44,22 @@ class DataSaver:
         if not os.path.exists(self.eval_dir):
             os.makedirs(self.eval_dir)
 
-        self.image_dir = os.path.join(self.experiment_dir, "img")
-        if not os.path.exists(self.image_dir):
-            os.makedirs(self.image_dir)
+        self.image_dir = None
+        if hasattr(opt, 'visualize') and opt.visualize:
+            self.image_dir = os.path.join(self.experiment_dir, "img")
+            if not os.path.exists(self.image_dir):
+                os.makedirs(self.image_dir)
 
         self.iteration = 0
 
-    def save_checkpoint(self, cell, filename='checkpoint.ckpt'):
+    def save_checkpoint(self, cell, filename):
         filename = os.path.join(self.experiment_dir, filename)
         mindspore.save_checkpoint(cell, filename)
 
-    def load_checkpoint(self, filename):
-        filename = os.path.join(self.experiment_dir, filename)
+    def load_checkpoint(self, filename, path=None):
+        if path is None:
+            path = self.experiment_dir
+        filename = os.path.join(path, filename)
         return mindspore.load_checkpoint(filename)
 
     def save_json(self, obj, filename):
@@ -63,13 +67,17 @@ class DataSaver:
         with open(filename,'w+') as f:
             json.dump(obj, f)
 
-    def load_json(self, filename):
-        filename = os.path.join(self.experiment_dir, filename)
+    def load_json(self, filename, path=None):
+        if path is None:
+            path = self.experiment_dir
+        filename = os.path.join(path, filename)
         with open(filename,'r+') as f:
             obj = json.load(f)
         return obj
 
     def save_image(self, img, filename):
+        if self.image_dir is None:
+            return
         filename = os.path.join(self.image_dir, filename)
         img = img.asnumpy().squeeze().astype(np.uint8)
         if img.ndim == 4 and img.shape[0] == 2:

@@ -1,27 +1,24 @@
-import argparse
 import os
+import argparse
 from glob import glob
 import ast
-import pickle as pkl
-import logging
 import colorama
+import numpy as np
+import logging
+import json
 
+import torch
 import mindspore
 from mindspore import context, Tensor
 import mindspore.ops as ops
 from mindspore.dataset import GeneratorDataset
 
-import sys
-sys.path.insert(0, '.')
-import utils
-from utils import logger, tools
-from modules import networks_2d
-from datasets.image import SingleImageDataset
-
-clear = colorama.Style.RESET_ALL
-blue = colorama.Fore.CYAN + colorama.Style.BRIGHT
-green = colorama.Fore.GREEN + colorama.Style.BRIGHT
-magenta = colorama.Fore.MAGENTA + colorama.Style.BRIGHT
+import src.utils as utils
+from src.utils import progress_bar, logger
+from src.sinFID import calculate_SIFID
+import src.tools.pt2ms as pt2ms
+from src.modules import networks_2d
+from src.datasets.image import SingleImageDataset
 
 
 def eval(opt, netG):
@@ -41,7 +38,7 @@ def eval(opt, netG):
         "logging_on_close": True,
         "postfix": True
     }
-    epoch_iterator = tools.create_progressbar(**progressbar_args)
+    epoch_iterator = progress_bar.create_progressbar(**progressbar_args)
 
     random_samples = []
     for iteration in epoch_iterator:
@@ -72,27 +69,40 @@ def eval(opt, netG):
         random_samples.append(fake_var)
 
     random_samples = ops.Concat(0)(random_samples)
-    with open(os.path.join(opt.saver.eval_dir, 'random_samples.pkl'), 'wb') as f:
-        pkl.dump(random_samples, f)
+    with open(os.path.join(opt.saver.eval_dir, 'random_samples.npy'), 'wb') as f:
+        np.save(f, random_samples.asnumpy())
     epoch_iterator.close()
+
+    return random_samples
 
 
 if __name__ == '__main__':
-    context.set_context(mode=0, device_id=6)
-
     # Argument Parser
     parser = argparse.ArgumentParser()
-    parser.add_argument('--exp-dir', required=True, help="Experiment directory")
+    parser.add_argument('--device-id', default=0, type=int, help='Device ID')
+
+    parser.add_argument('--exp-dir', type=str, required=True, help="Experiment directory")
+    parser.add_argument('--netG', type=str, default='netG.ckpt', help="path to netG (to continue training)")
+    parser.add_argument('--save-path', type=str, default='images', help="New directory for outputs")
+
     parser.add_argument('--num-samples', type=int, default=10, help='number of samples to generate')
-    parser.add_argument('--netG', default='netG.ckpt', help="path to netG (to continue training)")
     parser.add_argument('--niter', type=int, default=1, help='number of epochs')
     parser.add_argument('--batch-size', type=int, default=1)
     parser.add_argument('--data-rep', type=int, default=1, help='data repetition')
+    parser.add_argument('--scale-idx', type=int, default=-1, help='current scale idx (=len of body)')
+    parser.add_argument('--max-samples', type=int, default=4, help="Maximum number of samples")
 
     parser.set_defaults(hflip=False)
     opt = parser.parse_args()
 
-    exceptions = ['niter', 'data_rep', 'batch_size', 'netG']
+    clear = colorama.Style.RESET_ALL
+    blue = colorama.Fore.CYAN + colorama.Style.BRIGHT
+    green = colorama.Fore.GREEN + colorama.Style.BRIGHT
+    magenta = colorama.Fore.MAGENTA + colorama.Style.BRIGHT
+
+    context.set_context(mode=1, device_id=opt.device_id)
+
+    exceptions = ['niter', 'data_rep', 'batch_size', 'netG', 'scale_idx']
     all_dirs = glob(opt.exp_dir)
 
     progressbar_args = {
@@ -104,7 +114,8 @@ if __name__ == '__main__':
         "logging_on_close": True,
         "postfix": True
     }
-    exp_iterator = tools.create_progressbar(**progressbar_args)
+    exp_iterator = progress_bar.create_progressbar(**progressbar_args)
+    logger.configure_logging(os.path.abspath(os.path.join(opt.exp_dir, 'logbook.txt')))
 
     for idx, exp_dir in enumerate(exp_iterator):
         opt.experiment_dir = exp_dir
@@ -132,41 +143,48 @@ if __name__ == '__main__':
         # Tensorboard Summary
         # opt.summary = utils.TensorboardSummary(opt.saver.eval_dir)
 
-        # Logger
-        logger.configure_logging(os.path.abspath(os.path.join(opt.experiment_dir, 'logbook.txt')))
-
         # Adjust scales
         utils.adjust_scales2image(opt.img_size, opt)
 
-        # Initial parameters
-        opt.scale_idx = 0
-        opt.nfc_prev = 0
-        opt.Noise_Amps = []
-
         # Dataset
-        dataset = SingleImageDataset(opt)
-        data_loader = GeneratorDataset(dataset, ['data', 'zero-scale data'], shuffle=True)
-        data_loader = data_loader.batch(opt.batch_size)
-        opt.data_loader = data_loader
-
-        ## Current networks
-        assert hasattr(networks_2d, opt.generator)
-        netG = getattr(networks_2d, opt.generator)(opt)
-
-        # Init
-        opt.Noise_Amps = opt.saver.load_json('intermediate.json')['noise_amps']
-        opt.scale_idx = opt.saver.load_json('intermediate.json')['scale_idx']
-        opt.resumed_idx = opt.saver.load_json('intermediate.json')['scale_idx']
-        opt.resume_dir = '/'.join(opt.netG.split('/')[:-1])
+        opt.dataset = SingleImageDataset(opt)
+        data_loader = GeneratorDataset(opt.dataset, ['data', 'zero-scale data'], shuffle=True)
+        opt.data_loader = data_loader.batch(opt.batch_size)
 
         # Load
         if not os.path.isfile(opt.netG):
             raise RuntimeError("=> no <G> checkpoint found at '{}'".format(opt.netG))
-        checkpoint = mindspore.load_checkpoint(opt.netG)
+        if opt.netG.endswith('.pth'):
+            checkpoint = torch.load(opt.netG, map_location=torch.device('cpu'))
+            intermediate = pt2ms.load_intermediate(checkpoint)
+            with open(os.path.join(opt.exp_dir, 'intermediate.json'), 'w') as f:
+                json.dump(intermediate, f, indent=4)
+            checkpoint = pt2ms.p2m_HPVAEGAN_2d(checkpoint)
+        elif opt.netG.endswith('.ckpt'):
+            checkpoint = mindspore.load_checkpoint(opt.netG)
+            checkpoint = pt2ms.m2m_HPVAEGAN_2d(checkpoint)
+
+        # Init
+        if opt.scale_idx == -1:
+            opt.scale_idx = opt.saver.load_json('intermediate.json')['scale_idx']
+        opt.Noise_Amps = opt.saver.load_json('intermediate.json')['noise_amps'][:opt.scale_idx + 1]
+
+        ## Current networks
+        assert hasattr(networks_2d, opt.generator)
+        netG = getattr(networks_2d, opt.generator)(opt)
         for _ in range(opt.scale_idx):
             netG.init_next_stage()
-        print(checkpoint)
         mindspore.load_param_into_net(netG, checkpoint)
 
         ## Eval
-        eval(opt, netG)
+        random_samples = eval(opt, netG)
+        opt.experiments = sorted(glob(opt.exp_dir))
+        utils.generate_images(opt)
+
+        # SIFID
+        real_dir = os.path.join(*opt.dataset.image_path.split('/')[:-1]) if opt.dataset.image_path[0] != '/' \
+                   else '/' + os.path.join(*opt.dataset.image_path.split('/')[:-1])
+        fake_dir = os.path.join(opt.saver.eval_dir, opt.save_path)
+        sifid = calculate_SIFID(real_dir, fake_dir)
+        logging.info(f'SVFID: {sifid}')
+        print(f'SVFID: {sifid}')
